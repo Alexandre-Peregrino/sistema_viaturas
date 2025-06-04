@@ -1,0 +1,12 @@
+Requisitos do sistema:
+
+php com laravel e dbeaver utilizando as melhores práticas. O sistema é para gerenciar os veículos de uma frota, e tem as seguintes telas:
+1. login: o usuário informa login e senha para ir para a tela inicial. Essa tela de login já deve reconhecer se o usuário é admin ou P4. 
+2. na tela inicial: se o usuário logado for "admin" ele pode abrir a tela da lista de usuários(OPM) e fazer pesquisa, criar, editar e excluir usuário de todas as OPM. Se o usuário for P4 ele pode realizar essas interações apenas na unidade dele, e nesse caso a tela inicial deixará habilitada para alterações apenas a unidade respectiva ao P4 logado.
+3.lista de viaturas: se o usuário logado for "p4" o sistema lista apenas as viaturas da OPM deste usuário e ele apenas poderá pesquisar e editar estas. Se o usuário logado for "admin" ele poderá listar todas as viaturas de todas as unidades e editar todas elas.
+4. Cadastro de viatura: se o usuário logado for "p4" ele pode apenas editar os campos prefixo, trabalho e observação da entidade viatura. Se o usuário logado for "admin" ele poderá editar todos os campos da entidade viatura.
+Os campos da entidade viatura são: marca/ modelo, ano fabricação, situação carga, OPM, cidade/município, emprego, tipo uso, layout, tipo veículo, tração, combustível, ativo/processo descarga, placa, área, prefixo, chassi, renavam, categoria, aquisição de dados, entrega de dados OPM, número série rádio.
+Será utilizado para este projeto o servidor nginx. Dentro do projeto já deixe as configurações prontas para ele. 
+Me oriente passo a passo como fazer este sistema, utilize as melhores práticas de programação web, desempenho, banco de dados, documentos e elaboração de código, Utilize bootstrap para o front-end, faça um menu de telas de acordo com as permissões, gere uma interface limpa, intuitiva e agradável com base na cor azul, gere os arquivos js, css, scss necessários usando boas práticas, e faça os comentários necessários no código para o bom entendimento, usando boas práticas de documentação, gere as migrações com as entidades: OPM(sigla, cpr, área, cidade), rádio(número de série, modelo), veículo, usuário (cpf, nome, permitido, senha, OPM).Pode sugerir alterações que se façam necessárias para o bom funcionamento desse sistema web. Deixe todo o projeto documentado de maneira clara para que eu entenda o passo a passo que você está fazendo, pois sou um programador sem muita experiência e vou precisar além da construção do sistema que você vá me orientando durante todo o processo.
+qual o primeiro passo?
+
