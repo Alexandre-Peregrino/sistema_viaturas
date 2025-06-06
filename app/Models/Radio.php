@@ -9,7 +9,11 @@ class Radio extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['numero_serie', 'modelo', 'situacao'];
+    protected $fillable = [
+        'numero_serie',
+        'modelo',
+        'status',
+    ];
 
     public function veiculo()
     {

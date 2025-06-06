@@ -9,12 +9,20 @@ class MarcaModelo extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['marca', 'modelo'];
+    protected $fillable = [
+        'nome',
+        'fabricante',
+        'categoria',
+        'tipo',
+        'potencia',
+        'consumo_medio',
+        'durabilidade_estimativa_km',
+        'blindado',
+        'ativo',
+    ];
 
-    // Se os veículos usam essa tabela
     public function veiculos()
     {
         return $this->hasMany(Veiculo::class);
     }
 }
-
