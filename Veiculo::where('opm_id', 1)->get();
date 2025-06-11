@@ -1,0 +1,29 @@
+[90m= [39m[34;4mIlluminate\Database\Eloquent\Collection[39;24m {#2336
+    [34mall[39m: [
+      [34;4mApp\Models\Usuario[39;24m {#6253
+        [34mid[39m: [35m2[39m,
+        [34mcpf[39m: "[32m12345678902[39m",
+        [34mnome[39m: "[32mP4 User[39m",
+        [34mperfil[39m: "[32mp4[39m",
+        [34memail[39m: "[32mp4@example.com[39m",
+        #[33msenha[39m: "[32m$2y$12$Jf4L8NnnLfTR8wUMuL8jFOHoid3bbDZDHKktPeXn7l.LPjLA63sDC[39m",
+        [34mpermitido[39m: [36mtrue[39m,
+        [34mopm_id[39m: [35m1[39m,
+        [34mcreated_at[39m: "[32m2025-06-04 11:33:54[39m",
+        [34mupdated_at[39m: "[32m2025-06-04 11:33:54[39m",
+      },
+      [34;4mApp\Models\Usuario[39;24m {#6262
+        [34mid[39m: [35m4[39m,
+        [34mcpf[39m: "[32m98765432100[39m",
+        [34mnome[39m: "[32mP4 Silva[39m",
+        [34mperfil[39m: "[32mp4[39m",
+        [34memail[39m: [36mnull[39m,
+        #[33msenha[39m: "[32m$2y$12$J7yEAuaMNuk54PCTpDLMuuNTJonYSGsTBokG2xdRLZnJBmfWOfkkK[39m",
+        [34mpermitido[39m: [36mtrue[39m,
+        [34mopm_id[39m: [35m5[39m,
+        [34mcreated_at[39m: "[32m2025-06-06 11:24:57[39m",
+        [34mupdated_at[39m: "[32m2025-06-06 11:24:57[39m",
+      },
+    ],
+  }
+

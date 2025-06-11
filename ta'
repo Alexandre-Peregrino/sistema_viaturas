@@ -1,0 +1,41 @@
+[90m= [39m[34;4mIlluminate\Database\Eloquent\Collection[39;24m {#6316
+    [34mall[39m: [
+      [34;4mApp\Models\Opm[39;24m {#6284
+        [34mid[39m: [35m1[39m,
+        [34msigla[39m: "[32mOPM01[39m",
+        [34mcpr[39m: "[32mCPR Sul[39m",
+        [34marea[39m: "[32mRegião Metropolitana[39m",
+        [34mcidade[39m: "[32mSão Paulo[39m",
+        [34mcreated_at[39m: "[32m2025-06-04 11:31:16[39m",
+        [34mupdated_at[39m: "[32m2025-06-04 11:31:16[39m",
+      },
+      [34;4mApp\Models\Opm[39;24m {#6235
+        [34mid[39m: [35m4[39m,
+        [34msigla[39m: "[32m1CIA[39m",
+        [34mcpr[39m: "[32mCPR I[39m",
+        [34marea[39m: "[32mÁrea Norte[39m",
+        [34mcidade[39m: "[32mNatal[39m",
+        [34mcreated_at[39m: "[32m2025-06-06 11:23:37[39m",
+        [34mupdated_at[39m: "[32m2025-06-06 11:23:37[39m",
+      },
+      [34;4mApp\Models\Opm[39;24m {#6327
+        [34mid[39m: [35m5[39m,
+        [34msigla[39m: "[32m2CIA[39m",
+        [34mcpr[39m: "[32mCPR II[39m",
+        [34marea[39m: "[32mÁrea Sul[39m",
+        [34mcidade[39m: "[32mParnamirim[39m",
+        [34mcreated_at[39m: "[32m2025-06-06 11:23:37[39m",
+        [34mupdated_at[39m: "[32m2025-06-06 11:23:37[39m",
+      },
+      [34;4mApp\Models\Opm[39;24m {#6302
+        [34mid[39m: [35m9[39m,
+        [34msigla[39m: "[32m3ª CIPM[39m",
+        [34mcpr[39m: "[32mCPR Oeste[39m",
+        [34marea[39m: "[32mInterior[39m",
+        [34mcidade[39m: "[32mBarreiras[39m",
+        [34mcreated_at[39m: "[32m2025-06-09 15:45:38[39m",
+        [34mupdated_at[39m: "[32m2025-06-09 15:45:38[39m",
+      },
+    ],
+  }
+

@@ -1,0 +1,32 @@
+[90m= [39m[34;4mApp\Models\Veiculo[39;24m {#6759
+    [34mmarca_modelo[39m: "[32mToyota Hilux[39m",
+    [34mano_fabricacao[39m: [35m2020[39m,
+    [34msituacao_carga[39m: "[32mVazio[39m",
+    [34mopm_id[39m: [35m1[39m,
+    [34mcidade[39m: "[32mNatal[39m",
+    [34memprego[39m: "[32mViatura de Patrulha[39m",
+    [34mtipo_uso[39m: "[32mOperacional[39m",
+    [34mlayout[39m: "[32mPicape[39m",
+    [34mtipo_veiculo[39m: "[32mAutomóvel[39m",
+    [34mtracao[39m: "[32m4x4[39m",
+    [34mcombustivel[39m: "[32mDiesel[39m",
+    [34mativo[39m: [36mtrue[39m,
+    [34mem_processo_descarga[39m: [36mfalse[39m,
+    [34mplaca[39m: "[32mABC1234[39m",
+    [34marea[39m: "[32mZona Leste[39m",
+    [34mprefixo[39m: "[32mVTR-001[39m",
+    [34mchassi[39m: "[32mCHASSIHILUX001[39m",
+    [34mrenavam[39m: "[32mRENAVAMHILUX001[39m",
+    [34mcategoria[39m: "[32mViatura[39m",
+    [34maquisicao_dados[39m: [34;4mCarbon\Carbon @1584230400[39;24m {#6233
+      [34mdate[39m: [36m2020-03-15 00:00:00.0 UTC (+00:00)[39m,
+    },
+    [34mentrega_dados_opm[39m: [34;4mCarbon\Carbon @1584662400[39;24m {#6754
+      [34mdate[39m: [36m2020-03-20 00:00:00.0 UTC (+00:00)[39m,
+    },
+    [34mnumero_serie_radio[39m: [36mnull[39m,
+    [34mupdated_at[39m: "[32m2025-06-10 14:24:01[39m",
+    [34mcreated_at[39m: "[32m2025-06-10 14:24:01[39m",
+    [34mid[39m: [35m1[39m,
+  }
+
