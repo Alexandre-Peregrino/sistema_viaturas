@@ -39,12 +39,12 @@ class Usuario extends Authenticatable
     // Função para verificar se é admin
     public function isAdmin()
     {
-        return $this->perfil === 'admin';
+        return strtolower($this->perfil) === 'admin';
     }
 
     // Função para verificar se é P4
     public function isP4()
     {
-        return $this->perfil === 'p4';
+        return strtolower($this->perfil) === 'p4';
     }
 }

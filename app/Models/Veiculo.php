@@ -9,9 +9,14 @@ class Veiculo extends Model
 {
     use HasFactory;
 
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
     protected $fillable = [
-        'marca_modelo_id',
-        'tipo_veiculo_id',
+        'marca_modelo', // Adicionado como campo de texto
+        'tipo_veiculo', // Adicionado como campo de texto
         'ano_fabricacao',
         'situacao_carga',
         'opm_id',
@@ -34,27 +39,28 @@ class Veiculo extends Model
         'numero_serie_radio',
     ];
 
-    // Relação com OPM
+    // Relação com OPM (permanece)
     public function opm()
     {
         return $this->belongsTo(Opm::class);
     }
 
-    // Relação com Radio
+    // Relação com Radio (permanece)
     public function radio()
     {
         return $this->belongsTo(Radio::class, 'numero_serie_radio', 'numero_serie');
     }
 
-    public function tipoVeiculo()
-    {
-        return $this->belongsTo(TipoVeiculo::class);
-    }
+    // REMOVA ESTES MÉTODOS COMPLETAMENTE:
+    // public function tipoVeiculo()
+    // {
+    //     return $this->belongsTo(TipoVeiculo::class);
+    // }
 
-    public function marcaModelo()
-    {
-        return $this->belongsTo(MarcaModelo::class);
-    }
+    // public function marcaModelo()
+    // {
+    //     return $this->belongsTo(MarcaModelo::class);
+    // }
 
     public function manutencoes()
     {
