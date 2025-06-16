@@ -3,31 +3,48 @@
 namespace App\Http\Controllers;
 
 use App\Models\Radio;
-use App\Models\Veiculo;
 use Illuminate\Http\Request;
 
 class RadioController extends Controller
 {
-    // ADMIN: Lista todos os rádios
+    /**
+     * Display a listing of the resource.
+     * Lista todos os rádios.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index()
     {
         $radios = Radio::all();
         return view('admin.radios.index', compact('radios'));
     }
 
-    // ADMIN: Formulário de criação
+    /**
+     * Show the form for creating a new resource.
+     * Exibe o formulário para criar um novo rádio.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function create()
     {
         return view('admin.radios.create');
     }
 
-    // ADMIN: Armazena novo rádio
+    /**
+     * Store a newly created resource in storage.
+     * Armazena um novo rádio no banco de dados.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function store(Request $request)
     {
         $request->validate([
-            'numero_serie' => 'required|unique:radios,numero_serie',
-            'modelo' => 'required|string',
-            'status' => 'required|string',
+            'numero_serie' => 'required|string|unique:radios,numero_serie|max:255',
+            'marca' => 'required|string|max:255',
+            'modelo' => 'required|string|max:255',
+            'status' => 'required|string|max:255', // NOVO: Campo status é obrigatório
+            'observacao' => 'nullable|string',
         ]);
 
         Radio::create($request->all());
@@ -35,22 +52,37 @@ class RadioController extends Controller
         return redirect()->route('admin.radios.index')->with('success', 'Rádio cadastrado com sucesso!');
     }
 
-    // ADMIN: Formulário de edição
+    /**
+     * Show the form for editing the specified resource.
+     * Exibe o formulário para editar um rádio existente.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
         $radio = Radio::findOrFail($id);
         return view('admin.radios.edit', compact('radio'));
     }
 
-    // ADMIN: Atualiza o rádio
+    /**
+     * Update the specified resource in storage.
+     * Atualiza um rádio existente no banco de dados.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function update(Request $request, $id)
     {
         $radio = Radio::findOrFail($id);
 
         $request->validate([
-            'numero_serie' => 'required|unique:radios,numero_serie,' . $radio->id,
-            'modelo' => 'required|string',
-            'status' => 'required|string',
+            'numero_serie' => 'required|string|unique:radios,numero_serie,' . $radio->id . '|max:255',
+            'marca' => 'required|string|max:255',
+            'modelo' => 'required|string|max:255',
+            'status' => 'required|string|max:255', // NOVO: Campo status é obrigatório
+            'observacao' => 'nullable|string',
         ]);
 
         $radio->update($request->all());
@@ -58,26 +90,18 @@ class RadioController extends Controller
         return redirect()->route('admin.radios.index')->with('success', 'Rádio atualizado com sucesso!');
     }
 
-    // ADMIN: Remove rádio
+    /**
+     * Remove the specified resource from storage.
+     * Exclui um rádio do banco de dados.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function destroy($id)
     {
         $radio = Radio::findOrFail($id);
         $radio->delete();
 
-        return redirect()->route('admin.radios.index')->with('success', 'Rádio removido com sucesso!');
-    }
-
-    // P4: Lista apenas os rádios vinculados a viaturas da OPM do usuário
-    public function meusRadios()
-    {
-        $opmId = auth()->user()->opm_id;
-
-        $radios = Radio::whereIn('numero_serie', function ($query) use ($opmId) {
-            $query->select('numero_serie_radio')
-                ->from('veiculos')
-                ->where('opm_id', $opmId);
-        })->get();
-
-        return view('p4.radios.index', compact('radios'));
+        return redirect()->route('admin.radios.index')->with('success', 'Rádio excluído com sucesso!');
     }
 }

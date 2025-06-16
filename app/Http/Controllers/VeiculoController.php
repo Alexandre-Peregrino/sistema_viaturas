@@ -4,54 +4,64 @@ namespace App\Http\Controllers;
 
 use App\Models\Veiculo;
 use App\Models\Opm;
+use App\Models\Radio; // Adicionado para o campo radio
 use Illuminate\Http\Request;
-use App\Models\Radio;
-// Certifique-se de que quaisquer outros 'use' statements necessários estejam aqui, como para MarcaModelo ou TipoVeiculo, se você os usar em outros lugares do controlador.
 
 class VeiculoController extends Controller
 {
-    // Lista viaturas (admin e p4)
+    /**
+     * Display a listing of the resource.
+     * Exibe uma listagem de viaturas.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index()
     {
-        $usuario = auth()->user();
-
-        if ($usuario->isAdmin()) {
-            $veiculos = Veiculo::with(['opm'])->get();
-            return view('admin.viaturas.index', compact('veiculos'));
-        } elseif ($usuario->isP4()) {
-            $veiculos = Veiculo::with(['opm'])
-                ->where('opm_id', $usuario->opm_id)
-                ->get();
-            return view('p4.viaturas.index', compact('veiculos'));
-        } else {
-            abort(403, 'Acesso não autorizado');
-        }
+        // Eager load apenas a relação 'opm'
+        $viaturas = Veiculo::with('opm')->get();
+        return view('admin.viaturas.index', compact('viaturas'));
     }
 
-    // Formulário de criação (apenas admin)
+    /**
+     * Show the form for creating a new resource.
+     * Exibe o formulário para cadastrar uma nova viatura.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function create()
     {
-        $opms = Opm::all();
-        $radios = Radio::all();
+        $opms = Opm::all(); // Necessário para o dropdown de OPM
+        $radios = Radio::all(); // Necessário para o dropdown de Rádio
         return view('admin.viaturas.create', compact('opms', 'radios'));
     }
 
-
-    // Armazena nova viatura (apenas admin)
+    /**
+     * Store a newly created resource in storage.
+     * Armazena uma nova viatura no banco de dados.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function store(Request $request)
     {
         $request->validate([
-            'prefixo' => 'nullable|string|unique:veiculos,prefixo',
-            'placa' => 'required|string|unique:veiculos,placa|max:10',
-            'marca_modelo' => 'required|string|max:255',
-            'tipo_veiculo' => 'required|string|max:255',
-            'ano_fabricacao' => 'required|integer|min:1900|max:' . (date('Y') + 1),
-            'combustivel' => 'required|string|max:255',
-            'chassi' => 'required|string|unique:veiculos,chassi|max:255',
-            'renavam' => 'required|string|unique:veiculos,renavam|max:20',
+            'prefixo' => 'required|string|max:255',
+            'placa' => 'required|string|unique:veiculos,placa|max:255',
+            'marca_modelo' => 'required|string|max:255', // CORRIGIDO: Valida como 'marca_modelo'
+            'tipo_veiculo' => 'required|string|max:255', // Valida como string
             'opm_id' => 'required|exists:opms,id',
-            'situacao_carga' => 'required|string|max:255',
+            'cor' => 'nullable|string|max:255',
+            'ano_fabricacao' => 'required|integer|min:1900|max:' . (date('Y') + 1),
+            'ano_modelo' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
+            'chassi' => 'required|string|max:255|unique:veiculos,chassi',
+            'renavam' => 'required|string|max:255|unique:veiculos,renavam',
+            'combustivel' => 'required|string|max:255',
+            'capacidade_tanque' => 'nullable|numeric|min:0',
+            'quilometragem' => 'nullable|numeric|min:0',
+            'observacao' => 'nullable|string',
+            'status' => 'required|string|max:255',
             'cidade' => 'required|string|max:255',
+            'situacao_carga' => 'required|string|max:255',
             'emprego' => 'required|string|max:255',
             'tipo_uso' => 'required|string|max:255',
             'layout' => 'required|string|max:255',
@@ -63,41 +73,59 @@ class VeiculoController extends Controller
             'numero_serie_radio' => 'nullable|string|exists:radios,numero_serie',
             'ativo' => 'boolean',
             'em_processo_descarga' => 'boolean',
-            'observacao' => 'nullable|string',
         ]);
 
         Veiculo::create($request->all());
 
-        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura cadastrada com sucesso.');
+        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura cadastrada com sucesso!');
     }
 
-    // Formulário de edição (apenas admin)
+    /**
+     * Show the form for editing the specified resource.
+     * Exibe o formulário para editar uma viatura existente.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        $viatura = Veiculo::findOrFail($id); // Variável é $viatura
+        // Eager load apenas a relação 'opm'
+        $viatura = Veiculo::with('opm')->findOrFail($id);
         $opms = Opm::all();
-        $radios = Radio::all();
-        // CORRIGIDO AQUI: Passando $viatura no compact
+        $radios = Radio::all(); // Necessário para o dropdown de Rádio
         return view('admin.viaturas.edit', compact('viatura', 'opms', 'radios'));
     }
 
-    // Atualiza dados da viatura (apenas admin)
+    /**
+     * Update the specified resource in storage.
+     * Atualiza uma viatura existente no banco de dados.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function update(Request $request, $id)
     {
-        $veiculo = Veiculo::findOrFail($id);
+        $viatura = Veiculo::findOrFail($id);
 
         $request->validate([
-            'prefixo' => 'nullable|string|unique:veiculos,prefixo,' . $veiculo->id,
-            'placa' => 'required|string|unique:veiculos,placa,' . $veiculo->id . '|max:10',
-            'marca_modelo' => 'required|string|max:255',
-            'tipo_veiculo' => 'required|string|max:255',
-            'ano_fabricacao' => 'required|integer|min:1900|max:' . (date('Y') + 1),
-            'combustivel' => 'required|string|max:255',
-            'chassi' => 'required|string|unique:veiculos,chassi,' . $veiculo->id . '|max:255',
-            'renavam' => 'required|string|unique:veiculos,renavam,' . $veiculo->id . '|max:20',
+            'prefixo' => 'required|string|max:255',
+            'placa' => 'required|string|unique:veiculos,placa,' . $viatura->id . '|max:255',
+            'marca_modelo' => 'required|string|max:255', // CORRIGIDO: Valida como 'marca_modelo'
+            'tipo_veiculo' => 'required|string|max:255', // Valida como string
             'opm_id' => 'required|exists:opms,id',
-            'situacao_carga' => 'required|string|max:255',
+            'cor' => 'nullable|string|max:255',
+            'ano_fabricacao' => 'required|integer|min:1900|max:' . (date('Y') + 1),
+            'ano_modelo' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
+            'chassi' => 'required|string|max:255|unique:veiculos,chassi,' . $viatura->id,
+            'renavam' => 'required|string|max:255|unique:veiculos,renavam,' . $viatura->id,
+            'combustivel' => 'required|string|max:255',
+            'capacidade_tanque' => 'nullable|numeric|min:0',
+            'quilometragem' => 'nullable|numeric|min:0',
+            'observacao' => 'nullable|string',
+            'status' => 'required|string|max:255',
             'cidade' => 'required|string|max:255',
+            'situacao_carga' => 'required|string|max:255',
             'emprego' => 'required|string|max:255',
             'tipo_uso' => 'required|string|max:255',
             'layout' => 'required|string|max:255',
@@ -109,42 +137,48 @@ class VeiculoController extends Controller
             'numero_serie_radio' => 'nullable|string|exists:radios,numero_serie',
             'ativo' => 'boolean',
             'em_processo_descarga' => 'boolean',
-            'observacao' => 'nullable|string',
         ]);
 
-        $veiculo->update($request->all());
+        $viatura->update($request->all());
 
-        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura atualizada com sucesso.');
+        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura atualizada com sucesso!');
     }
 
-    // Exclui uma viatura (apenas admin)
+    /**
+     * Remove the specified resource from storage.
+     * Exclui uma viatura do banco de dados.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function destroy($id)
     {
-        $veiculo = Veiculo::findOrFail($id);
-        $veiculo->delete();
+        $viatura = Veiculo::findOrFail($id);
+        $viatura->delete();
 
-        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura excluída com sucesso.');
+        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura excluída com sucesso!');
     }
 
-    // Métodos para P4
+    // Métodos para P4 (se existirem, ajuste também para eager loading se necessário)
     public function editarRestrito($id)
     {
-        $veiculo = Veiculo::findOrFail($id);
-        // Pode ser necessário passar $opms e $radios aqui se o formulário P4 também precisar
-        return view('p4.viaturas.edit', compact('veiculo'));
+        $viatura = Veiculo::with('opm')->findOrFail($id); // Eager load apenas 'opm'
+        $opms = Opm::all();
+        return view('p4.viaturas.editar', compact('viatura', 'opms'));
     }
 
     public function atualizarRestrito(Request $request, $id)
     {
-        $veiculo = Veiculo::findOrFail($id);
-        // Validação mais restrita para P4, talvez apenas alguns campos
+        $viatura = Veiculo::findOrFail($id);
         $request->validate([
-            'situacao_carga' => 'required|string|max:255',
+            'quilometragem' => 'nullable|numeric|min:0',
             'observacao' => 'nullable|string',
+            'status' => 'required|string|max:255',
+            'situacao_carga' => 'nullable|string|max:255',
         ]);
 
-        $veiculo->update($request->all());
+        $viatura->update($request->only(['quilometragem', 'observacao', 'status', 'situacao_carga']));
 
-        return redirect()->route('p4.viaturas.index')->with('success', 'Viatura atualizada (P4) com sucesso.');
+        return redirect()->route('p4.viaturas.index')->with('success', 'Viatura atualizada com sucesso!');
     }
 }

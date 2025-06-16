@@ -9,66 +9,79 @@ class Veiculo extends Model
 {
     use HasFactory;
 
+    protected $table = 'veiculos'; // Garantir que a tabela está correta
+
     /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
      */
     protected $fillable = [
-        'marca_modelo', // Adicionado como campo de texto
-        'tipo_veiculo', // Adicionado como campo de texto
-        'ano_fabricacao',
-        'situacao_carga',
+        'prefixo',
+        'placa',
+        'marca_modelo', // CORRIGIDO: Usar 'marca_modelo' conforme o DB
+        'tipo_veiculo',
         'opm_id',
+        'cor',
+        'ano_fabricacao',
+        'ano_modelo',
+        'chassi',
+        'renavam',
+        'combustivel',
+        'capacidade_tanque',
+        'quilometragem',
+        'observacao',
+        'status',
         'cidade',
+        'situacao_carga',
         'emprego',
         'tipo_uso',
         'layout',
         'tracao',
-        'combustivel',
-        'ativo',
-        'em_processo_descarga',
-        'placa',
         'area',
-        'prefixo',
-        'chassi',
-        'renavam',
         'categoria',
         'aquisicao_dados',
         'entrega_dados_opm',
         'numero_serie_radio',
+        'ativo',
+        'em_processo_descarga',
     ];
 
-    // Relação com OPM (permanece)
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'aquisicao_dados' => 'date',
+        'entrega_dados_opm' => 'date',
+        'ativo' => 'boolean',
+        'em_processo_descarga' => 'boolean',
+    ];
+
+    /**
+     * Define a relação com a OPM.
+     * Uma viatura pertence a uma OPM.
+     */
     public function opm()
     {
         return $this->belongsTo(Opm::class);
     }
 
-    // Relação com Radio (permanece)
+    /**
+     * Define a relação com as Manutenções.
+     * Uma viatura pode ter muitas manutenções.
+     */
+    public function manutencoes()
+    {
+        return $this->hasMany(Manutencao::class);
+    }
+
+    /**
+     * Define a relação com o Rádio.
+     */
     public function radio()
     {
         return $this->belongsTo(Radio::class, 'numero_serie_radio', 'numero_serie');
-    }
-
-    // REMOVA ESTES MÉTODOS COMPLETAMENTE:
-    // public function tipoVeiculo()
-    // {
-    //     return $this->belongsTo(TipoVeiculo::class);
-    // }
-
-    // public function marcaModelo()
-    // {
-    //     return $this->belongsTo(MarcaModelo::class);
-    // }
-
-    public function manutencoes()
-    {
-        return $this->hasMany(\App\Models\Manutencao::class);
-    }
-
-    public function abastecimentos()
-    {
-        return $this->hasMany(\App\Models\Abastecimento::class);
     }
 }

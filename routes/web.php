@@ -14,10 +14,16 @@ Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login']);
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
+// Rota Home acessível a todos
+Route::get('/home', fn () => view('home'))->name('home');
+// Redireciona a raiz para a home
+Route::get('/', fn () => redirect()->route('home'));
+
+// Rota para a página de funcionalidades do sistema (pública)
+Route::get('/funcionalidades', fn () => view('funcionalidades'))->name('funcionalidades');
+
 // ROTAS PROTEGIDAS
 Route::middleware('auth')->group(function () {
-
-    Route::get('/home', fn () => view('home'))->name('home');
 
     // ROTAS ADMIN
     Route::middleware('can:isAdmin')->group(function () {
