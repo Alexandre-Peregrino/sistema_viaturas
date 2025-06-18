@@ -15,34 +15,36 @@ class Usuario extends Authenticatable
         'nome',
         'perfil',
         'email',
-        'senha',
-        'permitido',
+        'password',
         'opm_id',
     ];
 
     protected $hidden = [
-        'senha',
+        'password',
     ];
 
-    // Para usar autenticação, vamos mapear senha para password
-    public function getAuthPassword()
+    public function setPasswordAttribute($value)
     {
-        return $this->senha;
+        $this->attributes['password'] = strlen($value) === 60 && preg_match('/^\$2y\$/', $value)
+            ? $value
+            : Hash::make($value);
     }
 
-    // Relação com OPM
+    public function getAuthIdentifierName()
+    {
+        return 'cpf';
+    }
+
     public function opm()
     {
         return $this->belongsTo(Opm::class);
     }
 
-    // Função para verificar se é admin
     public function isAdmin()
     {
         return strtolower($this->perfil) === 'admin';
     }
 
-    // Função para verificar se é P4
     public function isP4()
     {
         return strtolower($this->perfil) === 'p4';

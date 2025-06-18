@@ -1,41 +1,48 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-4 bg-white p-4 rounded shadow">
-            <h4 class="mb-4 text-center text-primary">Login</h4>
+<div class="container mt-4 p-4 rounded shadow-sm" style="background-color: #f0f0f0;">
+    <h1 class="mb-4 text-primary text-center">Login</h1>
 
-            <form method="POST" action="{{ route('login') }}">
-                @csrf
-
-                <div class="mb-3">
-                    <label for="cpf" class="form-label">CPF</label>
-                    <input id="cpf" name="cpf" type="text" class="form-control @error('cpf') is-invalid @enderror" value="{{ old('cpf') }}" required autofocus>
-                    @error('cpf')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-
-                <div class="mb-3">
-                    <label for="password" class="form-label">Senha</label>
-                    <input id="password" name="password" type="password" class="form-control @error('password') is-invalid @enderror" required>
-                    @error('password')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-
-                <button type="submit" class="btn btn-primary w-100">Entrar</button>
-
-                @if ($errors->any())
-                    <div class="alert alert-danger mt-3">
-                        @foreach ($errors->all() as $erro)
-                            <div>{{ $erro }}</div>
-                        @endforeach
-                    </div>
-                @endif
-            </form>
+    @if ($errors->any())
+        <div class="alert alert-danger">
+            <ul class="mb-0">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
         </div>
-    </div>
+    @endif
+
+    <form method="POST" action="{{ route('login') }}">
+        @csrf
+
+        <div class="mb-3">
+            <label for="cpf" class="form-label">CPF</label>
+            <input id="cpf" type="text" class="form-control"
+                   name="cpf" value="{{ old('cpf') }}" required autofocus
+                   style="background-color: #F8F8F8; border: 1px solid #A0A0A0;">
+        </div>
+
+        <div class="mb-3">
+            <label for="password" class="form-label">Senha</label>
+            <input id="password" type="password" class="form-control"
+                   name="password" required
+                   style="background-color: #F8F8F8; border: 1px solid #A0A0A0;">
+        </div>
+
+        <div class="mb-3 form-check">
+            <input class="form-check-input" type="checkbox" name="remember" id="remember">
+            <label class="form-check-label" for="remember">
+                Lembrar-me
+            </label>
+        </div>
+
+        <div class="d-flex justify-content-start">
+            <button type="submit" class="btn btn-primary">
+                Login
+            </button>
+        </div>
+    </form>
 </div>
 @endsection
