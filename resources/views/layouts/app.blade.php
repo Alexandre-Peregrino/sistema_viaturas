@@ -114,9 +114,6 @@
                                 <a href="{{ route('admin.manutencoes.index') }}" class="list-group-item list-group-item-action bg-transparent text-white">
                                     <i class="bi bi-tools"></i> Manutenções (Admin)
                                 </a>
-                                <a href="{{ route('admin.marcas_modelos.index') }}" class="list-group-item list-group-item-action bg-transparent text-white">
-                                    <i class="bi bi-tags-fill"></i> Marcas/Modelos (Admin)
-                                </a>
                             @elseif(Auth::user()->isP4())
                                 <a href="{{ route('p4.viaturas.index') }}" class="list-group-item list-group-item-action bg-transparent text-white">
                                     <i class="bi bi-car-front-fill"></i> Minhas Viaturas (P4)
@@ -156,5 +153,6 @@
         </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    @yield('scripts')
 </body>
 </html>

@@ -17,15 +17,16 @@
 
                     <hr class="my-4"> {{-- Divisor --}}
 
-                    <div class="d-flex justify-content-center flex-column flex-md-row"> {{-- Menu de botões --}}
+                    <div>
                         @guest {{-- Se o usuário NÃO estiver logado --}}
-                            <a href="{{ route('login') }}" class="btn btn-success btn-lg mx-2 mb-2 mb-md-0">
-                                <i class="bi bi-box-arrow-in-right"></i> Fazer Login
-                            </a>
-                            <a href="{{ route('funcionalidades') }}" class="btn btn-info btn-lg mx-2">
-                                <i class="bi bi-question-circle"></i> Funcionalidades do Sistema
-                                {{-- Este link pode ser configurado para uma página de "Sobre" ou "Funcionalidades" --}}
-                            </a>
+                            <div class="d-flex justify-content-center flex-wrap">
+                                <a href="{{ route('login') }}" class="btn btn-success btn-lg mx-2 mb-2">
+                                    <i class="bi bi-box-arrow-in-right"></i> Fazer Login
+                                </a>
+                                <a href="{{ route('funcionalidades') }}" class="btn btn-info btn-lg mx-2 mb-2">
+                                    <i class="bi bi-question-circle"></i> Funcionalidades do Sistema
+                                </a>
+                            </div>
                         @else {{-- Se o usuário ESTIVER logado --}}
                             <h3 class="text-center mb-4 w-100">Painel de Controle</h3>
                             <p class="text-center w-100">Você está logado como
@@ -38,25 +39,25 @@
                                 @endif
                             </p>
 
-                            <div class="text-center mt-4 w-100">
-                                {{-- Links de navegação baseados no perfil do usuário --}}
-                                @if(Auth::user()->isAdmin())
-                                    <a href="{{ route('admin.viaturas.index') }}" class="btn btn-primary m-2">Gerenciar Viaturas (Admin)</a>
-                                    <a href="{{ route('admin.radios.index') }}" class="btn btn-warning m-2">Gerenciar Rádios (Admin)</a> {{-- NOVO LINK ADICIONADO AQUI --}}
-                                    <a href="{{ route('admin.usuarios.index') }}" class="btn btn-info m-2">Gerenciar Usuários (Admin)</a>
-                                    <a href="{{ route('admin.relatorios.geral') }}" class="btn btn-secondary m-2">Ver Relatórios Gerais</a>
-                                    {{-- Adicione outros links para admin conforme necessário --}}
-                                @elseif(Auth::user()->isP4())
-                                    <a href="{{ route('p4.viaturas.index') }}" class="btn btn-primary m-2">Ver Minhas Viaturas (P4)</a>
-                                    <a href="{{ route('p4.manutencoes.index') }}" class="btn btn-info m-2">Ver Minhas Manutenções (P4)</a>
-                                    <a href="{{ route('p4.radios.index') }}" class="btn btn-warning m-2">Ver Meus Rádios (P4)</a>
-                                    <a href="{{ route('p4.relatorios.index') }}" class="btn btn-secondary m-2">Ver Relatórios (P4)</a>
-                                    {{-- Adicione outros links para P4 conforme necessário --}}
-                                @endif
-                                <form action="{{ route('logout') }}" method="POST" class="d-inline">
-                                    @csrf
-                                    <button type="submit" class="btn btn-danger m-2">Sair</button>
-                                </form>
+                            <div class="mt-4 w-100">
+                                <div class="d-flex justify-content-center flex-wrap">
+                                    @if(Auth::user()->isAdmin())
+                                        <a href="{{ route('admin.viaturas.index') }}" class="btn btn-primary btn-lg mx-2 mb-2">Gerenciar Viaturas</a>
+                                        <a href="{{ route('admin.radios.index') }}" class="btn btn-warning btn-lg mx-2 mb-2">Gerenciar Rádios</a>
+                                        <a href="{{ route('admin.usuarios.index') }}" class="btn btn-info btn-lg mx-2 mb-2">Gerenciar Usuários</a>
+                                        <a href="{{ route('admin.relatorios.geral') }}" class="btn btn-secondary btn-lg mx-2 mb-2">Relatórios Gerais</a>
+                                    @elseif(Auth::user()->isP4())
+                                        <a href="{{ route('p4.viaturas.index') }}" class="btn btn-primary btn-lg mx-2 mb-2">Minhas Viaturas</a>
+                                        <a href="{{ route('p4.manutencoes.index') }}" class="btn btn-info btn-lg mx-2 mb-2">Minhas Manutenções</a>
+                                        <a href="{{ route('p4.radios.index') }}" class="btn btn-warning btn-lg mx-2 mb-2">Meus Rádios</a>
+                                        <a href="{{ route('p4.relatorios.index') }}" class="btn btn-secondary btn-lg mx-2 mb-2">Relatórios</a>
+                                    @endif
+
+                                    <form action="{{ route('logout') }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-danger btn-lg mx-2 mb-2">Sair</button>
+                                    </form>
+                                </div>
                             </div>
                         @endguest
                     </div>

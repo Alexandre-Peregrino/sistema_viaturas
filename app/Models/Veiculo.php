@@ -19,7 +19,7 @@ class Veiculo extends Model
     protected $fillable = [
         'prefixo',
         'placa',
-        'marca_modelo', // CORRIGIDO: Usar 'marca_modelo' conforme o DB
+        'marca_modelo_id', // CORRETO
         'tipo_veiculo',
         'opm_id',
         'cor',
@@ -84,4 +84,5 @@ class Veiculo extends Model
     {
         return $this->belongsTo(Radio::class, 'numero_serie_radio', 'numero_serie');
     }
+   
 }

@@ -47,12 +47,47 @@ class RelatorioController extends Controller
     }
 
     // Método para relatório de viaturas (admin)
-    public function viaturas()
+    public function viaturas(Request $request)
     {
-        $opms = Opm::all(); // Busque todas as OPMs
-        $veiculos = Veiculo::with('opm')->get(); // Carregue veículos com a relação OPM
-        return view('admin.relatorios.viaturas', compact('opms', 'veiculos'));
+        $query = Veiculo::with('opm');
+
+        if ($request->filled('opm_id')) {
+            $query->where('opm_id', $request->opm_id);
+        }
+
+        if ($request->filled('tipos')) {
+            $query->whereIn('tipo_veiculo', $request->tipos);
+        }
+
+        if ($request->filled('combustiveis')) {
+            $query->whereIn('combustivel', $request->combustiveis);
+        }
+
+        if ($request->filled('tracoes')) {
+            $query->whereIn('tracao', $request->tracoes);
+        }
+
+        $viaturas = $query->get();
+
+        return view('admin.relatorios.resultados.viaturas', [
+            'viaturas' => $viaturas,
+            'titulo' => 'Relatório de Viaturas Filtrado'
+        ]);
     }
+
+
+    // Método para exibir os filtros do relatório de viaturas (Admin)
+    public function viaturasFiltros()
+    {
+        $opms = Opm::all();
+        $tipos = Veiculo::select('tipo_veiculo')->distinct()->pluck('tipo_veiculo');
+        $combustiveis = Veiculo::select('combustivel')->distinct()->pluck('combustivel');
+        $tracoes = Veiculo::select('tracao')->distinct()->pluck('tracao');
+
+        return view('admin.relatorios.viaturas_filtros', compact('opms', 'tipos', 'combustiveis', 'tracoes'));
+    }
+
+
 
     // Métodos para o perfil P4
 

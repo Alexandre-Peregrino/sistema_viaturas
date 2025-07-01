@@ -37,6 +37,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/relatorios/filtrar', [RelatorioController::class, 'filtrar'])->name('relatorios.filtrar');
         Route::get('/admin/relatorios/geral', [RelatorioController::class, 'geral'])->name('admin.relatorios.geral');
         Route::get('/admin/relatorios/viaturas', [RelatorioController::class, 'viaturas'])->name('admin.relatorios.viaturas');
+        Route::get('/admin/relatorios/viaturas/filtros', [RelatorioController::class, 'viaturasFiltros'])->name('admin.relatorios.viaturas.filtros');
+
+        // NOVAS ROTAS DE FILTROS ADICIONADAS
+        Route::get('/admin/relatorios/usuarios/filtros', [RelatorioController::class, 'usuariosFiltros'])->name('admin.relatorios.usuarios.filtros');
+        Route::get('/admin/relatorios/radios/filtros', [RelatorioController::class, 'radiosFiltros'])->name('admin.relatorios.radios.filtros');
+        Route::get('/admin/relatorios/manutencoes/filtros', [RelatorioController::class, 'manutencoesFiltros'])->name('admin.relatorios.manutencoes.filtros');
 
         Route::resource('/admin/marcas-modelos', MarcaModeloController::class)->names('admin.marcas_modelos');
     });
