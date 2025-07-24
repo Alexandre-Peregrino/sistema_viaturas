@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Auth; // ← adicione esta linha
+use App\Ldap\LdapProvider;            // ← adicione esta linha
 use App\Models\Usuario;
 
 class AuthServiceProvider extends ServiceProvider
@@ -16,6 +18,12 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
+        // Registro do driver de autenticação LDAP
+        Auth::provider('ldap', function ($app, array $config) {
+            return new LdapProvider($app['hash'], $config['model']);
+        });
+
+        // Definições de permissões
         Gate::define('isAdmin', function (Usuario $user) {
             return $user->isAdmin();
         });

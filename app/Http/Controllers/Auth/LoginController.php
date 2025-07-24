@@ -33,9 +33,9 @@ class LoginController extends Controller
         return [
             $this->username() => $request->{$this->username()},
             'password' => $request->password,
-            'permitido' => true,
         ];
     }
+
 
     public function login(Request $request)
     {
@@ -71,17 +71,17 @@ class LoginController extends Controller
 
     protected function sendFailedLoginResponse(Request $request)
     {
-    $user = \App\Models\Usuario::where($this->username(), $request->{$this->username()})->first();
+        $user = \App\Models\Usuario::where($this->username(), $request->{$this->username()})->first();
 
-    // Se o CPF existe mas o usuário está bloqueado:
-    if ($user && !$user->permitido) {
-        throw ValidationException::withMessages([
-            $this->username() => ['Seu acesso está bloqueado. Procure o administrador do sistema.'],
-        ]);
+        // Se o CPF existe mas o usuário está bloqueado:
+        if ($user && !$user->permitido) {
+            throw ValidationException::withMessages([
+                $this->username() => ['Seu acesso está bloqueado. Procure o administrador do sistema.'],
+            ]);
         }
         // Caso geral: CPF errado ou senha errada
         throw ValidationException::withMessages([
-           $this->username() => [trans('auth.failed')],
+            $this->username() => [trans('auth.failed')],
         ]);
     }
 }
