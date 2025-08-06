@@ -74,10 +74,15 @@ class ManutencaoController extends Controller
     public function destroy($id)
     {
         $manutencao = Manutencao::findOrFail($id);
+        if ($manutencao->veiculo->opm_id !== auth()->user()->opm_id) {
+            abort(403);
+        }
+
         $manutencao->delete();
 
         return redirect()->route('admin.manutencoes.index')->with('success', 'Manutenção excluída com sucesso!');
     }
+
 
     // P4: Lista manutenções da OPM do usuário
     public function minhasManutencoes()
@@ -111,6 +116,7 @@ class ManutencaoController extends Controller
         }
 
         $request->validate([
+            'veiculo_id' => 'required|exists:veiculos,id',
             'descricao' => 'required|string',
             'data_inicio' => 'required|date',
             'data_fim' => 'nullable|date|after_or_equal:data_inicio',
@@ -118,7 +124,13 @@ class ManutencaoController extends Controller
             'valor' => 'nullable|numeric',
             'oficina' => 'nullable|string',
             'status' => 'required|string',
+        ], [
+            'veiculo_id.required' => 'O campo veiculo é obrigatório.',
+            'status.required' => 'O campo status é obrigatório.',
+            'data_inicio.required' => 'A data de início é obrigatória.',
+            'data_fim.after_or_equal' => 'A data de término deve ser após ou igual à data de início.',
         ]);
+
 
         $manutencao->update($request->all());
 

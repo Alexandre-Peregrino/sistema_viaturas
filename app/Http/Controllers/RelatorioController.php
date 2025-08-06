@@ -4,7 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Opm; // Certifique-se de importar o modelo Opm
 use App\Models\Veiculo;
+use App\Models\Usuario;
+use App\Models\Radio;
+use App\Models\Manutencao;
 use Illuminate\Http\Request;
+
+
 
 class RelatorioController extends Controller
 {
@@ -121,5 +126,96 @@ class RelatorioController extends Controller
         $veiculo = Veiculo::with(['opm', 'manutencoes', 'radio'])->findOrFail($id);
         // Implemente a lógica para exibir detalhes do veículo
         return view('detalhes_viatura', compact('veiculo')); // Supondo uma view para detalhes
+    }
+
+    // Exibir o formulário de filtros para o relatório de usuários (Admin)
+    public function usuariosFiltros()
+    {
+        // Se houver algum dado necessário (como OPMs para filtro), carregue aqui:
+        $opms = Opm::all(); // Opcional, só se quiser filtrar usuários por OPM
+
+        return view('admin.relatorios.usuarios_filtros', compact('opms'));
+    }
+
+    public function usuariosResultado(Request $request)
+    {
+        $query = Usuario::query()->with('opm');
+
+        if ($request->filled('perfis')) {
+            $query->whereIn('perfil', $request->perfis);
+        }
+
+        if ($request->filled('opms')) {
+            $query->whereIn('opm_id', $request->opms);
+        }
+
+        $usuarios = $query->get();
+        $opms = Opm::all();
+
+        return view('admin.relatorios.resultados.usuarios', compact('usuarios', 'opms'));
+    }
+
+    public function radiosFiltros()
+    {
+        $opms = Opm::all();
+        $marcas = Radio::select('marca')->distinct()->pluck('marca');
+        $modelos = Radio::select('modelo')->distinct()->pluck('modelo');
+        $situacoes = Radio::select('status')->distinct()->pluck('status');
+
+        return view('admin.relatorios.radios_filtros', compact('opms', 'marcas', 'modelos', 'situacoes'));
+    }
+    public function radiosResultado(Request $request)
+{
+    $query = Radio::with('opm');
+
+    if ($request->filled('opm_id')) {
+        $query->where('opm_id', $request->opm_id);
+    }
+
+    if ($request->filled('marca')) {
+        $query->where('marca', $request->marca);
+    }
+
+    if ($request->filled('modelo')) {
+        $query->where('modelo', $request->modelo);
+    }
+
+    // Correção: aceitar múltiplos status (situações) do formulário
+    if ($request->filled('situacoes')) {
+        $query->whereIn('status', $request->situacoes);
+    }
+
+    $radios = $query->get();
+
+    return view('admin.relatorios.radios_resultado', compact('radios'));
+}
+
+    public function manutencoesFiltros()
+    {
+        $opms = Opm::all(); // Carregar todas as OPMs
+        $tiposManutencao = Manutencao::select('tipo')->distinct()->pluck('tipo'); // Exemplo: tipos de manutenção
+
+        return view('admin.relatorios.manutencoes_filtros', compact('opms', 'tiposManutencao'));
+    }
+    public function manutencoesResultado(Request $request)
+    {
+        $query = Manutencao::query();
+
+        if ($request->filled('opm_id')) {
+            $query->where('opm_id', $request->opm_id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('tipo')) {
+            $query->where('tipo', $request->tipo);
+        }
+
+        $manutencoes = $query->get();
+        $opms = Opm::all(); // Para passar as OPMs novamente, se necessário
+
+        return view('admin.relatorios.resultados.manutencoes', compact('manutencoes', 'opms'));
     }
 }

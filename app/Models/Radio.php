@@ -20,6 +20,7 @@ class Radio extends Model
         'modelo',
         'status',
         'observacao', // <<-- GARANTA QUE 'observacao' ESTÁ AQUI
+        'opm_id',
     ];
 
     /**
@@ -41,5 +42,9 @@ class Radio extends Model
         // Assumindo que 'veiculos' tem uma coluna 'numero_serie_radio'
         // que referencia 'numero_serie' da tabela radios.
         return $this->hasOne(Veiculo::class, 'numero_serie_radio', 'numero_serie');
+    }
+    public function opm()
+    {
+        return $this->belongsTo(Opm::class);
     }
 }

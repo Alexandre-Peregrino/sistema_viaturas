@@ -4,7 +4,8 @@
 <div class="container mt-4">
     <h2 class="mb-4 text-primary">Filtrar Relatório de Usuários</h2>
 
-    <form action="#" method="GET" class="row g-3">
+    <form action="{{ route('admin.relatorios.usuarios.resultado') }}" method="GET" class="row g-3">
+
         <div class="col-md-4">
             <label class="form-label">Perfil</label>
             <div class="form-check">

@@ -8,6 +8,8 @@ use App\Http\Controllers\ManutencaoController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\RadioController;
 use App\Http\Controllers\MarcaModeloController;
+use App\Models\Manutencao;
+
 
 // ROTAS PÚBLICAS
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
@@ -32,12 +34,15 @@ Route::middleware('auth')->group(function () {
         Route::resource('/admin/viaturas', VeiculoController::class)->except(['show'])->names('admin.viaturas');
         Route::resource('/admin/manutencoes', ManutencaoController::class)->except(['show'])->names('admin.manutencoes');
         Route::resource('/admin/radios', RadioController::class)->except(['show'])->names('admin.radios');
+        Route::get('/admin/relatorios/radios', [RelatorioController::class, 'radiosResultado'])->name('admin.relatorios.radios');
 
         Route::get('/admin/relatorios', [RelatorioController::class, 'index'])->name('relatorios.index');
         Route::get('/admin/relatorios/filtrar', [RelatorioController::class, 'filtrar'])->name('relatorios.filtrar');
         Route::get('/admin/relatorios/geral', [RelatorioController::class, 'geral'])->name('admin.relatorios.geral');
         Route::get('/admin/relatorios/viaturas', [RelatorioController::class, 'viaturas'])->name('admin.relatorios.viaturas');
         Route::get('/admin/relatorios/viaturas/filtros', [RelatorioController::class, 'viaturasFiltros'])->name('admin.relatorios.viaturas.filtros');
+        Route::get('/admin/relatorios/manutencoes', [RelatorioController::class, 'manutencoesResultado'])->name('admin.relatorios.manutencoes');
+
 
         // NOVAS ROTAS DE FILTROS ADICIONADAS
         Route::get('/admin/relatorios/usuarios/filtros', [RelatorioController::class, 'usuariosFiltros'])->name('admin.relatorios.usuarios.filtros');
@@ -45,6 +50,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/relatorios/manutencoes/filtros', [RelatorioController::class, 'manutencoesFiltros'])->name('admin.relatorios.manutencoes.filtros');
 
         Route::resource('/admin/marcas-modelos', MarcaModeloController::class)->names('admin.marcas_modelos');
+
+        Route::get('/admin/relatorios/usuarios/resultado', [RelatorioController::class, 'usuariosResultado'])->name('admin.relatorios.usuarios.resultado');
+
     });
 
     // ROTAS P4

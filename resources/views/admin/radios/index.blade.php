@@ -21,15 +21,16 @@
         </div>
     @else
         <div class="table-responsive">
-            <table class="table table-hover table-striped">
-                <thead class="table-primary">
+            <table class="table table-hover table-striped align-middle">
+                <thead class="table-primary text-center">
                     <tr>
                         <th>ID</th>
                         <th>Número de Série</th>
                         <th>Marca</th>
                         <th>Modelo</th>
                         <th>Status</th>
-                        <th>Observação</th> {{-- COLUNA DE CABEÇALHO PARA OBSERVAÇÃO --}}
+                        <th>OPM</th>
+                        <th>Observação</th>
                         <th>Ações</th>
                     </tr>
                 </thead>
@@ -41,13 +42,19 @@
                         <td>{{ $radio->marca ?? '-' }}</td>
                         <td>{{ $radio->modelo }}</td>
                         <td>{{ $radio->status }}</td>
-                        <td>{{ $radio->observacao ?? '-' }}</td> {{-- ESTILO AMARELO REMOVIDO --}}
-                        <td>
-                            <a href="{{ route('admin.radios.edit', $radio->id) }}" class="btn btn-sm btn-warning">Editar</a>
-                            <form action="{{ route('admin.radios.destroy', $radio->id) }}" method="POST" style="display:inline;">
+                        <td>{{ $radio->opm->sigla ?? 'N/A' }}</td>
+                        <td>{{ $radio->observacao ?? '-' }}</td>
+                        <td class="text-nowrap">
+                            <a href="{{ route('admin.radios.edit', $radio->id) }}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                            <form action="{{ route('admin.radios.destroy', $radio->id) }}" method="POST" class="d-inline">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Confirmar exclusão do rádio {{ $radio->numero_serie }}?')">Excluir</button>
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                    onclick="return confirm('Confirmar exclusão do rádio {{ $radio->numero_serie }}?')">
+                                    <i class="bi bi-trash3-fill"></i>
+                                </button>
                             </form>
                         </td>
                     </tr>
