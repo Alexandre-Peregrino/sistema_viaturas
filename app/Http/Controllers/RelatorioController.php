@@ -165,30 +165,30 @@ class RelatorioController extends Controller
         return view('admin.relatorios.radios_filtros', compact('opms', 'marcas', 'modelos', 'situacoes'));
     }
     public function radiosResultado(Request $request)
-{
-    $query = Radio::with('opm');
+    {
+        $query = Radio::with('opm');
 
-    if ($request->filled('opm_id')) {
-        $query->where('opm_id', $request->opm_id);
+        if ($request->filled('opm_id')) {
+            $query->where('opm_id', $request->opm_id);
+        }
+
+        if ($request->filled('marca')) {
+            $query->where('marca', $request->marca);
+        }
+
+        if ($request->filled('modelo')) {
+            $query->where('modelo', $request->modelo);
+        }
+
+        // Correção: aceitar múltiplos status (situações) do formulário
+        if ($request->filled('situacoes')) {
+            $query->whereIn('status', $request->situacoes);
+        }
+
+        $radios = $query->get();
+
+        return view('admin.relatorios.radios_resultado', compact('radios'));
     }
-
-    if ($request->filled('marca')) {
-        $query->where('marca', $request->marca);
-    }
-
-    if ($request->filled('modelo')) {
-        $query->where('modelo', $request->modelo);
-    }
-
-    // Correção: aceitar múltiplos status (situações) do formulário
-    if ($request->filled('situacoes')) {
-        $query->whereIn('status', $request->situacoes);
-    }
-
-    $radios = $query->get();
-
-    return view('admin.relatorios.radios_resultado', compact('radios'));
-}
 
     public function manutencoesFiltros()
     {

@@ -19,7 +19,6 @@
             @foreach($manutencoes as $manutencao)
                 <tr>
                     <td>{{ $manutencao->veiculo->marca_modelo ?? 'Não informado' }}</td>
-
                     <td>{{ ucfirst($manutencao->status) }}</td>
                     <td>{{ ucfirst($manutencao->tipo) }}</td>
                     <td>{{ $manutencao->descricao }}</td>
