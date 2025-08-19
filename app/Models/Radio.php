@@ -9,42 +9,56 @@ class Radio extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'numero_serie',
-        'marca',    // Adicionado aqui
+        'marca',
         'modelo',
         'status',
-        'observacao', // <<-- GARANTA QUE 'observacao' ESTÁ AQUI
+        'observacao',
         'opm_id',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
-        // Se houver campos que precisam de casting, adicione-os aqui.
-        // Ex: 'created_at' => 'datetime', 'updated_at' => 'datetime',
+        // 'created_at' => 'datetime',
+        // 'updated_at' => 'datetime',
     ];
 
     /**
-     * Define a relação com a Viatura, se um rádio estiver associado a uma.
-     * Um rádio pode pertencer a uma viatura.
+     * Um rádio pode estar instalado em UMA viatura (ou em nenhuma).
+     * foreignKey em veiculos: numero_serie_radio
+     * ownerKey em radios:    numero_serie
      */
     public function viatura()
     {
-        // Assumindo que 'veiculos' tem uma coluna 'numero_serie_radio'
-        // que referencia 'numero_serie' da tabela radios.
         return $this->hasOne(Veiculo::class, 'numero_serie_radio', 'numero_serie');
     }
+
     public function opm()
     {
         return $this->belongsTo(Opm::class);
+    }
+
+    /**
+     * Escopo: rádios disponíveis = não vinculados a nenhuma viatura.
+     * Opcionalmente, passe uma lista de status permitidos:
+     *   Radio::disponiveis(['disponivel','estoque'])->get()
+     */
+    public function scopeDisponiveis($query, ?array $statusPermitidos = null)
+    {
+        $query->whereDoesntHave('viatura');
+
+        if (!empty($statusPermitidos)) {
+            $query->whereIn('status', $statusPermitidos);
+        }
+
+        return $query;
+    }
+
+    /**
+     * (Opcional) normaliza numero_serie: TRIM + UPPERCASE
+     */
+    public function setNumeroSerieAttribute($value): void
+    {
+        $this->attributes['numero_serie'] = strtoupper(trim((string) $value));
     }
 }

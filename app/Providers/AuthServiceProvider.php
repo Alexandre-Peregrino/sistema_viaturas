@@ -31,5 +31,8 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('isP4', function (Usuario $user) {
             return $user->isP4();
         });
+        Gate::define('consultarSisgp', function (Usuario $user) {
+            return $user->isAdmin() || $user->isP4();
+        });
     }
 }
