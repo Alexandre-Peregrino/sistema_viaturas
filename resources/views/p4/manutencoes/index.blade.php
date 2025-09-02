@@ -30,7 +30,7 @@
                     <td>{{ $manutencao->data_fim ?? '-' }}</td>
                     <td>{{ $manutencao->status }}</td>
                     <td>
-                        <a href="{{ route('p4.manutencoes.editar', $manutencao->id) }}" class="btn btn-primary btn-sm">Editar</a>
+                        <a href="{{ route('p4.manutencoes.edit', $manutencao->id) }}" class="btn btn-primary btn-sm">Editar</a>
                     </td>
                 </tr>
             @endforeach

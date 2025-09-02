@@ -9,44 +9,59 @@ class Opm extends Model
 {
     use HasFactory;
 
+    /**
+     * Deixei 'id' nos fillables para permitir upsert com o id externo do RotaWeb.
+     * Campos extras (cpr/area/cidade/municipio_id) continuam para uso interno.
+     */
     protected $fillable = [
+        'id',        // id vindo do RotaWeb (opcional)
         'sigla',
-        'cpr',
+        'nome',      // vem do RotaWeb
+        'cpr',       // usamos como “região”
         'area',
         'cidade',
-        'municipio_id', // novo campo (FK para municipios)
-        'regiao_id'     // novo campo (FK para regioes)
+        'municipio_id',
+        // 'regiao_id', // se não for usar, pode remover do fillable; deixar aqui é opcional
     ];
 
-    /**
-     * Relacionamento com veículos desta OPM
-     */
+    /* -------------------- Relacionamentos -------------------- */
+
     public function veiculos()
     {
         return $this->hasMany(Veiculo::class);
     }
 
-    /**
-     * Relacionamento com usuários desta OPM
-     */
     public function usuarios()
     {
         return $this->hasMany(Usuario::class);
     }
 
-    /**
-     * Relacionamento com município (nova estrutura)
-     */
     public function municipio()
     {
         return $this->belongsTo(Municipio::class);
     }
 
+   
+    /* ----------------------- Scopes úteis ----------------------- */
+
     /**
-     * Relacionamento com região (nova estrutura hierárquica)
+     * Filtra por CPR (região).
      */
-    public function regiao()
+    public function scopeCpr($query, ?string $cpr)
     {
-        return $this->belongsTo(Regiao::class);
+        if (!empty($cpr)) {
+            $query->where('cpr', $cpr);
+        }
+        return $query;
+    }
+
+    /* ---------------------- Helpers opcionais ---------------------- */
+
+    /**
+     * Exibe "SIGLA — Nome" para selects e tabelas.
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        return trim(($this->sigla ?? '') . ' — ' . ($this->nome ?? ''));
     }
 }

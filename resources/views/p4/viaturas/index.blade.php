@@ -14,29 +14,37 @@
                 <th>ID</th>
                 <th>Prefixo</th>
                 <th>Placa</th>
-                <th>Modelo</th>
+                <th>Marca/Modelo</th>
                 <th>Tipo</th>
                 <th>Ações</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($veiculos as $viatura)
+            @forelse($viaturas as $viatura)
                 <tr>
                     <td>{{ $viatura->id }}</td>
                     <td>{{ $viatura->prefixo }}</td>
                     <td>{{ $viatura->placa }}</td>
-                    <td>{{ $viatura->marcaModelo->modelo ?? '-' }}</td>
-                    <td>{{ $viatura->tipoVeiculo->nome ?? '-' }}</td>
+                    <td>{{ $viatura->marca_modelo ?? '-' }}</td>
+                    <td>{{ $viatura->tipo_veiculo ?? '-' }}</td>
                     <td>
-                        <a href="{{ route('p4.viaturas.editar', $viatura->id) }}" class="btn btn-sm btn-warning">Editar</a>
+                        <a href="{{ route('p4.viaturas.edit', $viatura) }}" class="btn btn-sm btn-warning">
+                            Editar
+                        </a>
                     </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">Nenhuma viatura cadastrada na sua OPM.</td>
+                    <td colspan="6" class="text-center">Nenhuma viatura cadastrada na sua OPM.</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
+
+    @if(method_exists($viaturas, 'links'))
+        <div class="mt-3">
+            {{ $viaturas->links() }}
+        </div>
+    @endif
 </div>
 @endsection

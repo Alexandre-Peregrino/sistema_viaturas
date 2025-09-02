@@ -52,7 +52,7 @@
                                         <a href="{{ route('p4.radios.index') }}" class="btn btn-warning btn-lg mx-2 mb-2">Meus Rádios</a>
                                         <a href="{{ route('p4.relatorios.index') }}" class="btn btn-secondary btn-lg mx-2 mb-2">Relatórios</a>
                                     @endif
-
+                                    
                                     <form action="{{ route('logout') }}" method="POST" class="d-inline">
                                         @csrf
                                         <button type="submit" class="btn btn-danger btn-lg mx-2 mb-2">Sair</button>

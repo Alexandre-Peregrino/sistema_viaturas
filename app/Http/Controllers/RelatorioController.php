@@ -9,7 +9,8 @@ use App\Models\Radio;
 use App\Models\Manutencao;
 use Illuminate\Http\Request;
 
-
+// >>> NOVO: cliente do RotaWeb
+use App\Services\RotawebClient;
 
 class RelatorioController extends Controller
 {
@@ -80,7 +81,6 @@ class RelatorioController extends Controller
         ]);
     }
 
-
     // Método para exibir os filtros do relatório de viaturas (Admin)
     public function viaturasFiltros()
     {
@@ -91,8 +91,6 @@ class RelatorioController extends Controller
 
         return view('admin.relatorios.viaturas_filtros', compact('opms', 'tipos', 'combustiveis', 'tracoes'));
     }
-
-
 
     // Métodos para o perfil P4
 
@@ -164,6 +162,7 @@ class RelatorioController extends Controller
 
         return view('admin.relatorios.radios_filtros', compact('opms', 'marcas', 'modelos', 'situacoes'));
     }
+
     public function radiosResultado(Request $request)
     {
         $query = Radio::with('opm');
@@ -197,6 +196,7 @@ class RelatorioController extends Controller
 
         return view('admin.relatorios.manutencoes_filtros', compact('opms', 'tiposManutencao'));
     }
+
     public function manutencoesResultado(Request $request)
     {
         $query = Manutencao::query();
@@ -217,5 +217,89 @@ class RelatorioController extends Controller
         $opms = Opm::all(); // Para passar as OPMs novamente, se necessário
 
         return view('admin.relatorios.resultados.manutencoes', compact('manutencoes', 'opms'));
+    }
+    
+    public function viaturasPorCpr(Request $request)
+    {
+        $cpr = (string) $request->query('cpr', '');
+
+        // lista de CPRs distintas (vindas das OPMs do seu banco local)
+        $cprs = Opm::query()
+            ->whereNotNull('cpr')
+            ->where('cpr', '<>', '')
+            ->distinct()
+            ->orderBy('cpr')
+            ->pluck('cpr');
+
+        // viaturas filtradas por CPR (via relação com OPM)
+        $viaturas = Veiculo::with('opm')
+            ->when(
+                $cpr !== '',
+                fn($q) =>
+                $q->whereHas('opm', fn($q2) => $q2->where('cpr', $cpr))
+            )
+            ->orderBy('placa')
+            ->paginate(20);
+
+        return view('admin.viaturas.por_cpr', [
+            'titulo'   => 'Viaturas por CPR',
+            'viaturas' => $viaturas,
+            'cprs'     => $cprs,
+            'cpr'      => $cpr,
+        ]);
+    }
+
+
+    /* =========================================================================================
+     |                                   BLOCO RotaWeb (NOVO)
+     ========================================================================================= */
+
+    /** Formulário de filtros – Efetivo Previsto (RotaWeb) */
+    public function rotawebEfetivoPrevistoForm()
+    {
+        // Se quiser, carregue combos auxiliares aqui (ex.: lista de operações do seu sistema)
+        return view('admin.relatorios.rotaweb.efetivo_previsto_filtros');
+    }
+
+    /** Resultado – Efetivo Previsto (RotaWeb) */
+    public function rotawebEfetivoPrevistoResultado(Request $request, RotawebClient $rota)
+    {
+        $data = $request->validate([
+            'operacao' => ['required'],
+            'inicio'   => ['required', 'string'],
+            'termino'  => ['required', 'string'],
+        ]);
+
+        try {
+            $dados = $rota->efetivoPrevisto($data['operacao'], $data['inicio'], $data['termino']);
+            $filtros = $data;
+            return view('admin.relatorios.rotaweb.efetivo_previsto_resultado', compact('dados', 'filtros'));
+        } catch (\Throwable $e) {
+            return back()->withErrors(['rotaweb' => $e->getMessage()])->withInput();
+        }
+    }
+
+    /** Formulário de filtros – Efetivo Executado (RotaWeb) */
+    public function rotawebEfetivoExecutadoForm()
+    {
+        return view('admin.relatorios.rotaweb.efetivo_executado_filtros');
+    }
+
+    /** Resultado – Efetivo Executado (RotaWeb) */
+    public function rotawebEfetivoExecutadoResultado(Request $request, RotawebClient $rota)
+    {
+        $data = $request->validate([
+            'operacao' => ['required'],
+            'inicio'   => ['required', 'string'],
+            'termino'  => ['required', 'string'],
+        ]);
+
+        try {
+            $dados = $rota->efetivoExecutado($data['operacao'], $data['inicio'], $data['termino']);
+            $filtros = $data;
+            return view('admin.relatorios.rotaweb.efetivo_executado_resultado', compact('dados', 'filtros'));
+        } catch (\Throwable $e) {
+            return back()->withErrors(['rotaweb' => $e->getMessage()])->withInput();
+        }
     }
 }

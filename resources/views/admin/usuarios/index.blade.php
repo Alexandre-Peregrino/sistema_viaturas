@@ -4,7 +4,16 @@
 <div class="container">
     <h1 class="mb-4 text-primary">Lista de Usuários</h1>
 
-    <a href="{{ route('admin.usuarios.create') }}" class="btn btn-primary mb-3">Novo Usuário</a>
+    {{-- Campo de busca --}}
+    <form method="GET" action="{{ route('admin.usuarios.index') }}" class="mb-3 d-flex">
+        <input type="text" name="busca" class="form-control me-2"
+               placeholder="Buscar por nome, CPF ou matrícula"
+               value="{{ request('busca') }}">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        @if(request('busca'))
+            <a href="{{ route('admin.usuarios.index') }}" class="btn btn-secondary ms-2">Limpar</a>
+        @endif
+    </form>
 
     @if(session('success'))
         <div class="alert alert-success">{{ session('success') }}</div>
@@ -42,10 +51,15 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">Nenhum usuário cadastrado.</td>
+                    <td colspan="7">Nenhum usuário encontrado.</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
+
+    {{-- Paginação --}}
+    <div class="d-flex justify-content-center mt-3">
+        {{ $usuarios->links() }}
+    </div>
 </div>
 @endsection

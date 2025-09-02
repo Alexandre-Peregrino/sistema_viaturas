@@ -15,7 +15,8 @@
         </div>
     @endif
 
-    <form action="{{ route('p4.manutencoes.atualizar', $manutencao->id) }}" method="POST">
+    {{-- use o nome de rota DO resource: p4.manutencoes.update --}}
+    <form action="{{ route('p4.manutencoes.update', $manutencao) }}" method="POST">
         @csrf
         @method('PUT')
 
@@ -26,22 +27,26 @@
 
         <div class="mb-3">
             <label>Descrição</label>
-            <input type="text" name="descricao" class="form-control" value="{{ $manutencao->descricao }}" required>
+            <input type="text" name="descricao" class="form-control"
+                   value="{{ old('descricao', $manutencao->descricao) }}" required>
         </div>
 
         <div class="mb-3">
             <label>Data Início</label>
-            <input type="date" name="data_inicio" class="form-control" value="{{ $manutencao->data_inicio }}" required>
+            <input type="date" name="data_inicio" class="form-control"
+                   value="{{ old('data_inicio', optional($manutencao->data_inicio)->format('Y-m-d')) }}" required>
         </div>
 
         <div class="mb-3">
             <label>Data Fim</label>
-            <input type="date" name="data_fim" class="form-control" value="{{ $manutencao->data_fim }}">
+            <input type="date" name="data_fim" class="form-control"
+                   value="{{ old('data_fim', optional($manutencao->data_fim)->format('Y-m-d')) }}">
         </div>
 
         <div class="mb-3">
             <label>Status</label>
-            <input type="text" name="status" class="form-control" value="{{ $manutencao->status }}" required>
+            <input type="text" name="status" class="form-control"
+                   value="{{ old('status', $manutencao->status) }}" required>
         </div>
 
         <button type="submit" class="btn btn-success">Atualizar</button>
