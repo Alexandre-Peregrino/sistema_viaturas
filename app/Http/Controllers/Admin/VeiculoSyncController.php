@@ -13,13 +13,17 @@ class VeiculoSyncController extends Controller
 {
     public function __construct()
     {
-        // Garante autenticação e permissão de administrador em todas as actions
-        $this->middleware(['auth', 'can:isAdmin']);
+        /**
+         * IMPORTANTE:
+         * - NÃO coloque auth/can aqui, senão o probe nunca funciona com debug token.
+         * - As proteções de acesso devem ser feitas nas ROTAS (web.php), não no construtor.
+         */
     }
 
     /**
      * Consulta rápida no ROTA por PLACA e exibe uma prévia (não grava).
-     * Agora retorna TODOS os campos do veículo consultado.
+     * - Se request espera JSON -> retorna JSON (ideal para curl)
+     * - Caso contrário -> volta para a tela anterior com flash (para uso via browser)
      */
     public function probe(Request $request, RotaVeiculosClient $client)
     {
@@ -30,33 +34,62 @@ class VeiculoSyncController extends Controller
         $placa = strtoupper(trim((string) $request->input('placa')));
 
         try {
-            // Usa a rota de placa direta com fallback para /veiculos
             $resp  = $client->consultarPorPlacaRobusto($placa);
             $items = $resp['items'] ?? [];
         } catch (ConnectionException $e) {
-            return back()->withErrors(['rota' => 'Timeout/conexão ao consultar o ROTA.'])->withInput();
+            return $this->probeError($request, 504, 'Timeout/conexão ao consultar o ROTA.');
         } catch (RequestException $e) {
             $status = $e->response?->status();
             if (in_array($status, [401, 403], true)) {
-                return back()->withErrors(['rota' => 'Autenticação no ROTA falhou (' . $status . '). Verifique ROTA_BEARER.'])->withInput();
+                return $this->probeError(
+                    $request,
+                    401,
+                    'Autenticação no ROTA falhou (' . $status . '). Verifique ROTA_BEARER.'
+                );
             }
-            return back()->withErrors(['rota' => 'Erro ao consultar o ROTA (HTTP ' . ($status ?? 'desconhecido') . ').'])->withInput();
+            return $this->probeError(
+                $request,
+                502,
+                'Erro ao consultar o ROTA (HTTP ' . ($status ?? 'desconhecido') . ').'
+            );
         } catch (\Throwable $e) {
-            return back()->withErrors(['rota' => $e->getMessage()])->withInput();
+            return $this->probeError($request, 500, $e->getMessage());
         }
 
         if (!$items) {
-            return back()->withErrors(['rota' => 'Placa não encontrada no ROTA.'])->withInput();
+            return $this->probeError($request, 404, 'Placa não encontrada no ROTA.');
         }
 
-        // Busca por placa deve retornar só 1; envia o item completo para a view
-        $veiculo = $items[0]; // já vem normalizado em lowercase pelo client
+        $veiculo = $items[0]; // normalizado em lowercase pelo client
+
+        // Se for AJAX/JSON (curl com Accept: application/json), devolve JSON
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'      => true,
+                'placa'   => $placa,
+                'veiculo' => $veiculo,
+            ], 200);
+        }
+
+        // Caso seja browser, mantém comportamento "volta com flash"
         return back()->with('rota_veiculo', $veiculo)->withInput();
+    }
+
+    private function probeError(Request $request, int $status, string $message)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'      => false,
+                'message' => $message,
+            ], $status);
+        }
+
+        return back()->withErrors(['rota' => $message])->withInput();
     }
 
     /**
      * (Opcional) Sincroniza veículos do ROTA para a base local (upsert por placa).
-     * Se você não for persistir localmente, pode remover esta action e sua rota/botão.
+     * Mantém proteção via rotas (auth/can) no web.php.
      */
     public function sync(Request $request, RotaVeiculosClient $client)
     {
@@ -70,7 +103,6 @@ class VeiculoSyncController extends Controller
         $total   = 0;
 
         try {
-            // Sem paginação documentada: busca uma “página” e encerra
             $payload = array_filter([
                 'per_page'      => $perPage,
                 'updated_since' => $updated,
@@ -78,16 +110,17 @@ class VeiculoSyncController extends Controller
 
             $data  = $client->listarVeiculos($payload);
             $items = $data['items'] ?? [];
+
             if (!$items) {
                 return back()->with('status', 'Sincronização concluída: nenhum item retornado pelo ROTA.');
             }
 
             $now  = now();
             $rows = [];
+
             foreach ($items as $remoto) {
                 $local = $client->transformarParaSchemaLocal($remoto);
                 if (empty($local['placa'])) {
-                    // upsert exige chave única para deduplicar
                     continue;
                 }
                 $rows[] = array_merge($local, [
@@ -97,10 +130,8 @@ class VeiculoSyncController extends Controller
             }
 
             if ($rows) {
-                // Dedup por placa para evitar colisões desnecessárias
                 $rows = collect($rows)->unique('placa')->values()->all();
 
-                // Ajuste o nome da tabela se necessário
                 DB::table('veiculos')->upsert(
                     $rows,
                     uniqueBy: ['placa'],

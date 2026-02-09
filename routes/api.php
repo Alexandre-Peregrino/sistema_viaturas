@@ -6,12 +6,25 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\RotawebProxyController;
 use App\Http\Middleware\RequireApiKey;
 
+// Probe ROTA Veículos
+use App\Http\Controllers\Admin\VeiculoSyncController;
+
+/*
+|--------------------------------------------------------------------------
+| Probe ROTA Veículos (endpoint técnico)
+| Prefixo /api é automático em routes/api.php
+|--------------------------------------------------------------------------
+*/
+Route::post('admin/viaturas/rota/probe', [VeiculoSyncController::class, 'probe'])
+    ->name('api.admin.viaturas.rota.probe')
+    ->middleware('auth_or_debug');
+
 /*
 |--------------------------------------------------------------------------
 | Ping da API
 |--------------------------------------------------------------------------
 */
-Route::middleware('api')->get('/ping', function () {
+Route::get('ping', function () {
     return response()->json(['message' => 'API online']);
 });
 
@@ -88,10 +101,10 @@ Route::prefix('rotaweb')
         Route::post('/unidades', [RotawebProxyController::class, 'unidades']);
 
         // ------------------- Auto-fiscalização / consultas ----------------
-        Route::post('/funcoes/autofiscalizaveis', [RotawebProxyController::class, 'funcoesAutofiscalizaveis']);
-        Route::post('/funcoes/autofiscalizar',    [RotawebProxyController::class, 'autofiscalizarInicio']); // início
-        Route::post('/autofiscalizar/termino',    [RotawebProxyController::class, 'autofiscalizarTermino']); // término
-        Route::post('/execucoes/autofiscalizaveis', [RotawebProxyController::class, 'execucoesAutofiscalizaveis']);
+        Route::post('/funcoes/autofiscalizaveis',    [RotawebProxyController::class, 'funcoesAutofiscalizaveis']);
+        Route::post('/funcoes/autofiscalizar',       [RotawebProxyController::class, 'autofiscalizarInicio']);   // início
+        Route::post('/autofiscalizar/termino',       [RotawebProxyController::class, 'autofiscalizarTermino']);  // término
+        Route::post('/execucoes/autofiscalizaveis',  [RotawebProxyController::class, 'execucoesAutofiscalizaveis']);
 
         // ---------------------------- Escalas -----------------------------
         Route::post('/escalas/previstas',   [RotawebProxyController::class, 'escalasPrevistas']);

@@ -12,10 +12,9 @@ class Veiculo extends Model
     protected $table = 'veiculos';
 
     protected $fillable = [
-        // colunas confirmadas via \Schema::getColumnListing('veiculos')
         'prefixo',
         'placa',
-        'marca_modelo',          // <- existe NA TABELA (não é *_id)
+        'marca_modelo',
         'tipo_veiculo',
         'opm_id',
         'ano_fabricacao',
@@ -24,70 +23,89 @@ class Veiculo extends Model
         'combustivel',
         'quilometragem',
         'observacao',
-        'status',                // existe
-        'cidade',                // legado (vamos normalizar com municipios)
+        'status',
+        'cidade',
         'situacao_carga',
         'emprego',
         'tipo_uso',
         'layout',
         'tracao',
-        'area',                  // legado (vamos normalizar com regioes)
+        'area',
         'categoria',
         'aquisicao_dados',
         'entrega_dados_opm',
-        'numero_serie_radio',    // legado (futuramente trocar por radio_id)
+        'numero_serie_radio',
         'ativo',
         'em_processo_descarga',
+        'dt_final_garantia',
+        'garantia_bateria_meses',
+
+
+        // planilha / cadastro
+        'proprietario',
+        'contrato',
+
+        // ✅ NOVO: Nº Processo SEI
+        'processo_sei',
+
+        'classe_igpn',
+        'tipo_igpn',
+
+        'marca',
+        'modelo',
+        'municipio_id',
+
+        // se esses campos existirem na tabela e você usa na blade:
+        'n_serie_bateria',
+        'dt_inicial_garantia',
     ];
 
     protected $casts = [
-        'aquisicao_dados'        => 'date',
-        'entrega_dados_opm'      => 'date',
-        'ativo'                  => 'boolean',
-        'em_processo_descarga'   => 'boolean',
+        'aquisicao_dados'      => 'date',
+        'entrega_dados_opm'    => 'date',
+        'ativo'                => 'boolean',
+        'em_processo_descarga' => 'boolean',
+        'dt_inicial_garantia'  => 'date',
+        'dt_final_garantia'   => 'date',
+        'garantia_bateria_meses' => 'integer',
+
     ];
 
-    /** Uma viatura pertence a uma OPM. */
     public function opm()
     {
         return $this->belongsTo(Opm::class);
     }
 
-    /** Uma viatura pode ter muitas manutenções. */
     public function manutencoes()
     {
         return $this->hasMany(Manutencao::class);
     }
 
-    /**
-     * Relacionamento atual com Rádio usando chave não numérica:
-     * veiculos.numero_serie_radio -> radios.numero_serie
-     * (compatível com o que existe hoje)
-     */
     public function radio()
     {
         return $this->belongsTo(Radio::class, 'numero_serie_radio', 'numero_serie');
     }
 
-    /**
-     * Preparado para o histórico de lotações por intervalo (veiculo_lotacoes):
-     * assim que você rodar a migration create_veiculo_lotacoes_table,
-     * isso já funciona.
-     */
+    public function municipio()
+    {
+        return $this->belongsTo(Municipio::class);
+    }
+
     public function lotacoes()
     {
         return $this->hasMany(VeiculoLotacao::class);
     }
 
-    /** Scopes úteis nos relatórios */
     public function scopeAtivos($q)
     {
         return $q->where('ativo', true);
     }
 
-    public function scopeEmOperacao($q)
+    public function scopePorOpm($q, ?int $opmId)
     {
-        // ajuste conforme o padrão de valores do seu "status"
-        return $q->where('status', 'operando')->orWhereNull('status');
+        if (!empty($opmId)) {
+            $q->where('opm_id', $opmId);
+        }
+        return $q;
     }
 }

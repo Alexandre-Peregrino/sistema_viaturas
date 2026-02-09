@@ -5,25 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Veiculo;
 use App\Models\Opm;
 use App\Models\Radio;
+use App\Models\Municipio;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Carbon;
 
 class VeiculoController extends Controller
 {
-    /**
-     * LISTAGEM (view: admin.viaturas.index)
-     * Mostra OPM, Município (via OPM) e permite exibir a lotação atual (coluna opcional).
-     */
     public function index()
     {
         return view('admin.viaturas.index');
     }
 
-
-    /**
-     * RELATÓRIO (view: admin.relatorios.resultados.viaturas)
-     * Filtros: usar_lotacao, mostrar_tempo, opm_id, tipos[], combustiveis[], tracoes[]
-     */
     public function relatorio(Request $request)
     {
         $usarLotacao  = $request->boolean('usar_lotacao');
@@ -68,12 +62,9 @@ class VeiculoController extends Controller
         ]);
     }
 
-    /**
-     * Aba: Viaturas por OPM (mostra viaturas atualmente lotadas na OPM).
-     */
     public function porOpm(Request $request)
     {
-        $opms = Opm::orderBy('sigla')->get(['id', 'sigla']);
+        $opms  = Opm::orderBy('sigla')->get(['id', 'sigla']);
         $opmId = (int) $request->input('opm_id');
 
         $veiculos = collect();
@@ -94,81 +85,247 @@ class VeiculoController extends Controller
         return view('admin.viaturas.por_opm', compact('opms', 'opmId', 'veiculos'));
     }
 
-    /** CREATE */
+    private function getFormOptions(): array
+    {
+        $opmIds = Veiculo::query()
+            ->whereNotNull('opm_id')
+            ->distinct()
+            ->pluck('opm_id');
+
+        $opms = Opm::query()
+            ->whereIn('id', $opmIds)
+            ->orderBy('sigla')
+            ->get(['id', 'sigla', 'nome']);
+
+        $cidades = Veiculo::query()
+            ->select('cidade')
+            ->whereNotNull('cidade')
+            ->whereRaw("TRIM(cidade) <> ''")
+            ->distinct()
+            ->orderBy('cidade')
+            ->pluck('cidade');
+
+        $areas = Veiculo::query()
+            ->select('area')
+            ->whereNotNull('area')
+            ->whereRaw("TRIM(area) <> ''")
+            ->distinct()
+            ->orderBy('area')
+            ->pluck('area');
+
+        $municipioIds = Veiculo::query()
+            ->select('municipio_id')
+            ->whereNotNull('municipio_id')
+            ->distinct()
+            ->pluck('municipio_id');
+
+        $municipios = Municipio::query()
+            ->whereIn('id', $municipioIds)
+            ->orderBy('nome')
+            ->get(['id', 'nome']);
+
+        return compact('opms', 'cidades', 'areas', 'municipios');
+    }
+
     public function create()
     {
-        $opms = Opm::with('municipio:id,nome')->orderBy('sigla')->get();
-
-        // Apenas rádios não vinculados a nenhuma viatura e não inativos
         $radiosDisponiveis = Radio::disponiveis()
             ->orderBy('numero_serie')
             ->get(['numero_serie', 'marca', 'modelo']);
 
-        // Para compatibilidade com views antigas/novas
-        $radios = $radiosDisponiveis;
+        $opts = $this->getFormOptions();
 
-        return view('admin.viaturas.create', compact('opms', 'radios', 'radiosDisponiveis'));
+        return view('admin.viaturas.create', [
+            'opms'              => $opts['opms'],
+            'cidades'           => $opts['cidades'],
+            'areas'             => $opts['areas'],
+            'municipios'        => $opts['municipios'],
+            'radios'            => $radiosDisponiveis,
+            'radiosDisponiveis' => $radiosDisponiveis,
+        ]);
     }
 
-    /** STORE */
+    private function normalizeRequest(Request $request): void
+    {
+        if ($request->has('placa')) {
+            $placa = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) $request->input('placa')));
+            $request->merge(['placa' => $placa]);
+        }
+
+        if ($request->has('prefixo') && is_string($request->input('prefixo'))) {
+            $request->merge(['prefixo' => trim((string)$request->input('prefixo'))]);
+        }
+
+        if ($request->has('chassi')) {
+            $chassi = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) $request->input('chassi')));
+            $request->merge(['chassi' => $chassi]);
+        }
+
+        if ($request->has('renavam')) {
+            $renavam = preg_replace('/\D/', '', (string) $request->input('renavam'));
+            $request->merge(['renavam' => $renavam]);
+        }
+
+        if ($request->has('numero_serie_radio')) {
+            $v = trim((string)$request->input('numero_serie_radio'));
+            $request->merge(['numero_serie_radio' => $v === '' ? null : $v]);
+        }
+
+        foreach ([
+            'marca_modelo','cidade','area','tracao','categoria','emprego','layout',
+            'situacao_carga','proprietario','contrato','processo_sei','observacao','status',
+            'tipo_veiculo_outro','combustivel_outro'
+        ] as $k) {
+            if ($request->has($k) && is_string($request->input($k))) {
+                $v = trim((string) $request->input($k));
+                $request->merge([$k => $v === '' ? null : $v]);
+            }
+        }
+
+        if ($request->has('municipio_id') && (string) $request->input('municipio_id') === '') {
+            $request->merge(['municipio_id' => null]);
+        }
+
+        if ($request->has('dt_inicial_garantia') && (string)$request->input('dt_inicial_garantia') === '') {
+            $request->merge(['dt_inicial_garantia' => null]);
+        }
+
+        if ($request->has('garantia_bateria_meses') && (string)$request->input('garantia_bateria_meses') === '') {
+            $request->merge(['garantia_bateria_meses' => null]);
+        }
+
+        // CHECK-safe: não gravar "Outros" no campo com CHECK
+        if ($request->input('tipo_veiculo') === 'Outros') {
+            $request->merge(['tipo_veiculo' => null]);
+        }
+
+        if ($request->input('combustivel') === 'Outros') {
+            $request->merge(['combustivel' => null]);
+        }
+    }
+
+    private function applyGarantiaBateria(array &$validated): void
+    {
+        if (!empty($validated['dt_inicial_garantia']) && !empty($validated['garantia_bateria_meses'])) {
+            $validated['dt_final_garantia'] = Carbon::parse($validated['dt_inicial_garantia'])
+                ->addMonthsNoOverflow((int)$validated['garantia_bateria_meses'])
+                ->format('Y-m-d');
+        } else {
+            $validated['dt_final_garantia'] = null;
+            $validated['garantia_bateria_meses'] = null;
+        }
+    }
+
     public function store(Request $request)
     {
+        // CAPTURA antes de normalizar (senão "Outros" vira null)
+        $tipoSelecionado = $request->input('tipo_veiculo');
+        $combSelecionado = $request->input('combustivel');
+
+        $this->normalizeRequest($request);
+
         $currentYearPlusOne = now()->year + 1;
 
+        $statusOptions = [
+            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+        ];
+
+        $tipoOptions = [
+            'SUV','Pickup','Moto','Sedan','Hatch','Van','Caminhonete','Camioneta','Ônibus','Micro-Ônibus','Caminhão','Utilitário','Reboque',
+        ];
+
+        $combOptions = [
+            'Gasolina','Diesel','Flex','Álcool','Elétrico','Híbrido','GNV',
+        ];
+
         $validated = $request->validate([
-            'prefixo'           => ['required', 'string', 'max:255'],
-            'placa'             => [
-                'required',
-                'string',
-                'max:7',
-                // ABC1234 (antigo) OU ABC1D23 (Mercosul)
+            'marca_modelo'   => ['required', 'string', 'max:255'],
+            'placa' => [
+                'required','string','size:7','alpha_num',
                 'regex:/^([A-Z]{3}\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/',
-                'unique:veiculos,placa',
+                Rule::unique('veiculos', 'placa'),
             ],
-            'marca_modelo'      => ['required', 'string', 'max:255'],
-            'tipo_veiculo'      => ['required', 'string', 'max:255'],
-            'opm_id'            => ['required', 'exists:opms,id'],
-            'cor'               => ['nullable', 'string', 'max:255'],
-            'ano_fabricacao'    => ['required', 'integer', 'between:1900,' . $currentYearPlusOne],
-            'ano_modelo'        => ['nullable', 'integer', 'between:1900,' . $currentYearPlusOne],
-            'chassi'            => ['required', 'string', 'size:17', 'alpha_num', 'unique:veiculos,chassi'],
-            'renavam'           => ['required', 'regex:/^\d{9,11}$/', 'unique:veiculos,renavam'],
-            'combustivel'       => ['required', 'string', 'max:255'],
-            'capacidade_tanque' => ['nullable', 'numeric', 'min:0'],
-            'quilometragem'     => ['nullable', 'numeric', 'min:0'],
-            'observacao'        => ['nullable', 'string'],
-            'cidade'            => ['required', 'string', 'max:255'],
-            'situacao_carga'    => ['required', 'string', 'max:255'],
-            'emprego'           => ['required', 'string', 'max:255'],
-            'tipo_uso'          => ['required', 'string', 'max:255'],
-            'layout'            => ['required', 'string', 'max:255'],
-            'tracao'            => ['required', 'string', 'max:255'],
-            'area'              => ['required', 'string', 'max:255'],
-            'categoria'         => ['required', 'string', 'max:255'],
-            'aquisicao_dados'   => ['nullable', 'date'],
-            'entrega_dados_opm' => ['nullable', 'date'],
+            'prefixo' => ['required', 'string', 'max:255', Rule::unique('veiculos', 'prefixo')],
+            'cidade'  => ['required', 'string', 'max:255'],
+            'area'    => ['required', 'string', 'max:255'],
+            'opm_id'  => ['required', 'integer', Rule::exists('opms', 'id')],
+
+            'chassi'  => ['required', 'string', 'size:17', 'alpha_num', Rule::unique('veiculos', 'chassi')],
+            'renavam' => ['required', 'string', 'regex:/^\d{9,11}$/', Rule::unique('veiculos', 'renavam')],
+
+            'status'  => ['required', 'string', Rule::in($statusOptions)],
+            'layout'  => ['required', 'string', 'max:255'],
+
             'numero_serie_radio' => [
-                'nullable',
-                'string',
-                'max:100',
+                'nullable','string','max:100',
                 Rule::exists('radios', 'numero_serie'),
                 Rule::unique('veiculos', 'numero_serie_radio'),
             ],
-            'status'            => ['required', 'string', 'in:Ativo,Em Processo de Descarga'],
+
+            'ano_fabricacao'     => ['nullable', 'integer', 'between:1900,' . $currentYearPlusOne],
+
+            // IMPORTANTE: aqui NÃO tem required_with! é só nullable.
+            'tipo_veiculo'       => ['nullable', 'string', 'max:255', Rule::in($tipoOptions)],
+            'tipo_veiculo_outro' => ['nullable', 'string', 'max:255'],
+
+            'combustivel'        => ['nullable', 'string', 'max:255', Rule::in($combOptions)],
+            'combustivel_outro'  => ['nullable', 'string', 'max:255'],
+
+            'tracao'             => ['nullable', 'string', 'max:255'],
+            'categoria'          => ['nullable', 'string', 'max:255'],
+            'emprego'            => ['nullable', 'string', 'max:255'],
+
+            'aquisicao_dados'    => ['nullable', 'date'],
+            'entrega_dados_opm'  => ['nullable', 'date'],
+
+            'proprietario'       => ['nullable', 'string', 'max:255'],
+            'contrato'           => ['nullable', 'string', 'max:255'],
+            'processo_sei'       => ['nullable', 'string', 'max:255'],
+
+            'dt_inicial_garantia'    => ['nullable', 'date'],
+            'garantia_bateria_meses' => ['required_with:dt_inicial_garantia', 'integer', 'min:1', 'max:120'],
+
+            'n_serie_bateria'    => ['nullable', 'string', 'max:80'],
+
+            'situacao_carga'     => ['required', 'string', 'max:255'],
+
+            'municipio_id'       => ['nullable', 'integer'],
+            'observacao'         => ['nullable', 'string'],
         ], [
-            'placa.unique'      => 'Esta placa já está cadastrada para outra viatura.',
-            'placa.regex'       => 'A placa deve seguir o padrão válido (ABC1234 ou ABC1D23).',
-            'chassi.unique'     => 'Este chassi já está cadastrado para outra viatura.',
-            'renavam.unique'    => 'Este Renavam já está cadastrado para outra viatura.',
-            'renavam.regex'     => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
+            'placa.regex'    => 'A placa deve seguir o padrão válido (ABC1234 ou ABC1D23).',
+            'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
+            'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
+            'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'garantia_bateria_meses.required_with' => 'Informe o prazo de garantia (meses) quando a data inicial estiver preenchida.',
         ]);
 
-        // Normalizações
-        $validated['placa']  = strtoupper($validated['placa']);
-        $validated['chassi'] = strtoupper($validated['chassi']);
-        if (empty($validated['numero_serie_radio'])) {
-            $validated['numero_serie_radio'] = null;
+        // Agora sim: valida "Outros" usando o valor escolhido ANTES da normalização
+        if ($tipoSelecionado === 'Outros') {
+            $request->validate([
+                'tipo_veiculo_outro' => ['required', 'string', 'max:255'],
+            ], [
+                'tipo_veiculo_outro.required' => 'Informe qual é o tipo do veículo quando selecionar "Outros".',
+            ]);
+            $validated['tipo_veiculo'] = null; // CHECK-safe
+            $validated['tipo_veiculo_outro'] = trim((string)$request->input('tipo_veiculo_outro'));
+        } else {
+            $validated['tipo_veiculo_outro'] = null;
         }
+
+        if ($combSelecionado === 'Outros') {
+            $request->validate([
+                'combustivel_outro' => ['required', 'string', 'max:255'],
+            ], [
+                'combustivel_outro.required' => 'Informe qual é o combustível quando selecionar "Outros".',
+            ]);
+            $validated['combustivel'] = null; // CHECK-safe
+            $validated['combustivel_outro'] = trim((string)$request->input('combustivel_outro'));
+        } else {
+            $validated['combustivel_outro'] = null;
+        }
+
+        $this->applyGarantiaBateria($validated);
 
         Veiculo::create($validated);
 
@@ -177,113 +334,170 @@ class VeiculoController extends Controller
             ->with('success', 'Viatura cadastrada com sucesso!');
     }
 
-    /** EDIT */
     public function edit($id)
     {
-        $viatura = Veiculo::with('opm')->findOrFail($id);
-        $opms = Opm::with('municipio:id,nome')->orderBy('sigla')->get();
+        $veiculo = Veiculo::with('opm')->findOrFail($id);
 
-        // Rádios disponíveis + inclui o rádio já vinculado (para não sumir do select)
         $radiosDisponiveis = Radio::disponiveis()
             ->orderBy('numero_serie')
             ->get(['numero_serie', 'marca', 'modelo']);
 
-        if ($viatura->numero_serie_radio) {
-            $atual = Radio::where('numero_serie', $viatura->numero_serie_radio)
+        if ($veiculo->numero_serie_radio) {
+            $atual = Radio::where('numero_serie', $veiculo->numero_serie_radio)
                 ->first(['numero_serie', 'marca', 'modelo']);
+
             if ($atual && $radiosDisponiveis->where('numero_serie', $atual->numero_serie)->isEmpty()) {
                 $radiosDisponiveis->push($atual);
                 $radiosDisponiveis = $radiosDisponiveis->sortBy('numero_serie')->values();
             }
         }
 
-        // Compatibilidade com views
-        $radios = $radiosDisponiveis;
+        $opts = $this->getFormOptions();
 
-        return view('admin.viaturas.edit', compact('viatura', 'opms', 'radios', 'radiosDisponiveis'));
+        return view('admin.viaturas.edit', [
+            'veiculo'           => $veiculo,
+            'opms'              => $opts['opms'],
+            'cidades'           => $opts['cidades'],
+            'areas'             => $opts['areas'],
+            'municipios'        => $opts['municipios'],
+            'radios'            => $radiosDisponiveis,
+            'radiosDisponiveis' => $radiosDisponiveis,
+        ]);
     }
 
-    /** UPDATE */
     public function update(Request $request, $id)
     {
-        $viatura = Veiculo::findOrFail($id);
+        $veiculo = Veiculo::findOrFail($id);
+
+        // CAPTURA antes de normalizar
+        $tipoSelecionado = $request->input('tipo_veiculo');
+        $combSelecionado = $request->input('combustivel');
+
+        $this->normalizeRequest($request);
+
         $currentYearPlusOne = now()->year + 1;
 
+        $statusOptions = [
+            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+        ];
+
+        $tipoOptions = [
+            'SUV','Pickup','Moto','Sedan','Hatch','Van','Caminhonete','Camioneta','Ônibus','Micro-Ônibus','Caminhão','Utilitário','Reboque',
+        ];
+
+        $combOptions = [
+            'Gasolina','Diesel','Flex','Álcool','Elétrico','Híbrido','GNV',
+        ];
+
         $validated = $request->validate([
-            'prefixo'           => ['required', 'string', 'max:255'],
-            'placa'             => [
-                'required',
-                'string',
-                'max:7',
+            'marca_modelo'   => ['required', 'string', 'max:255'],
+            'placa' => [
+                'required','string','size:7','alpha_num',
                 'regex:/^([A-Z]{3}\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/',
-                Rule::unique('veiculos', 'placa')->ignore($viatura->id),
+                Rule::unique('veiculos', 'placa')->ignore($veiculo->id),
             ],
-            'marca_modelo'      => ['required', 'string', 'max:255'],
-            'tipo_veiculo'      => ['required', 'string', 'max:255'],
-            'opm_id'            => ['required', 'exists:opms,id'],
-            'cor'               => ['nullable', 'string', 'max:255'],
-            'ano_fabricacao'    => ['required', 'integer', 'between:1900,' . $currentYearPlusOne],
-            'ano_modelo'        => ['nullable', 'integer', 'between:1900,' . $currentYearPlusOne],
-            'chassi'            => ['required', 'string', 'size:17', 'alpha_num', Rule::unique('veiculos', 'chassi')->ignore($viatura->id)],
-            'renavam'           => ['required', 'regex:/^\d{9,11}$/', Rule::unique('veiculos', 'renavam')->ignore($viatura->id)],
-            'combustivel'       => ['required', 'string', 'max:255'],
-            'capacidade_tanque' => ['nullable', 'numeric', 'min:0'],
-            'quilometragem'     => ['nullable', 'numeric', 'min:0'],
-            'observacao'        => ['nullable', 'string'],
-            'cidade'            => ['required', 'string', 'max:255'],
-            'situacao_carga'    => ['required', 'string', 'max:255'],
-            'emprego'           => ['required', 'string', 'max:255'],
-            'tipo_uso'          => ['required', 'string', 'max:255'],
-            'layout'            => ['required', 'string', 'max:255'],
-            'tracao'            => ['required', 'string', 'max:255'],
-            'area'              => ['required', 'string', 'max:255'],
-            'categoria'         => ['required', 'string', 'max:255'],
-            'aquisicao_dados'   => ['nullable', 'date'],
-            'entrega_dados_opm' => ['nullable', 'date'],
+            'prefixo' => ['required', 'string', 'max:255', Rule::unique('veiculos', 'prefixo')->ignore($veiculo->id)],
+            'cidade'  => ['required', 'string', 'max:255'],
+            'area'    => ['required', 'string', 'max:255'],
+            'opm_id'  => ['required', 'integer', Rule::exists('opms', 'id')],
+
+            'chassi'  => ['required', 'string', 'size:17', 'alpha_num', Rule::unique('veiculos', 'chassi')->ignore($veiculo->id)],
+            'renavam' => ['required', 'string', 'regex:/^\d{9,11}$/', Rule::unique('veiculos', 'renavam')->ignore($veiculo->id)],
+
+            'status'  => ['required', 'string', Rule::in($statusOptions)],
+            'layout'  => ['required', 'string', 'max:255'],
+
             'numero_serie_radio' => [
-                'nullable',
-                'string',
-                'max:100',
+                'nullable','string','max:100',
                 Rule::exists('radios', 'numero_serie'),
-                Rule::unique('veiculos', 'numero_serie_radio')->ignore($viatura->id),
+                Rule::unique('veiculos', 'numero_serie_radio')->ignore($veiculo->id),
             ],
-            'status'            => ['required', 'string', 'in:Ativo,Em Processo de Descarga'],
+
+            'ano_fabricacao'     => ['nullable', 'integer', 'between:1900,' . $currentYearPlusOne],
+
+            'tipo_veiculo'       => ['nullable', 'string', 'max:255', Rule::in($tipoOptions)],
+            'tipo_veiculo_outro' => ['nullable', 'string', 'max:255'],
+
+            'combustivel'        => ['nullable', 'string', 'max:255', Rule::in($combOptions)],
+            'combustivel_outro'  => ['nullable', 'string', 'max:255'],
+
+            'tracao'             => ['nullable', 'string', 'max:255'],
+            'categoria'          => ['nullable', 'string', 'max:255'],
+            'emprego'            => ['nullable', 'string', 'max:255'],
+
+            'aquisicao_dados'    => ['nullable', 'date'],
+            'entrega_dados_opm'  => ['nullable', 'date'],
+
+            'proprietario'       => ['nullable', 'string', 'max:255'],
+            'contrato'           => ['nullable', 'string', 'max:255'],
+            'processo_sei'       => ['nullable', 'string', 'max:255'],
+
+            'dt_inicial_garantia'    => ['nullable', 'date'],
+            'garantia_bateria_meses' => ['required_with:dt_inicial_garantia', 'integer', 'min:1', 'max:120'],
+
+            'n_serie_bateria'    => ['nullable', 'string', 'max:80'],
+
+            'situacao_carga'     => ['required', 'string', 'max:255'],
+
+            'municipio_id'       => ['nullable', 'integer'],
+            'observacao'         => ['nullable', 'string'],
         ], [
-            'placa.unique'      => 'Esta placa já está cadastrada para outra viatura.',
-            'placa.regex'       => 'A placa deve seguir o padrão válido (ABC1234 ou ABC1D23).',
-            'chassi.unique'     => 'Este chassi já está cadastrado para outra viatura.',
-            'renavam.unique'    => 'Este Renavam já está cadastrado para outra viatura.',
-            'renavam.regex'     => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
+            'placa.regex'    => 'A placa deve seguir o padrão válido (ABC1234 ou ABC1D23).',
+            'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
+            'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
+            'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'garantia_bateria_meses.required_with' => 'Informe o prazo de garantia (meses) quando a data inicial estiver preenchida.',
         ]);
 
-        // Normalizações
-        $validated['placa']  = strtoupper($validated['placa']);
-        $validated['chassi'] = strtoupper($validated['chassi']);
-        if (empty($validated['numero_serie_radio'])) {
-            $validated['numero_serie_radio'] = null;
+        if ($tipoSelecionado === 'Outros') {
+            $request->validate([
+                'tipo_veiculo_outro' => ['required', 'string', 'max:255'],
+            ], [
+                'tipo_veiculo_outro.required' => 'Informe qual é o tipo do veículo quando selecionar "Outros".',
+            ]);
+            $validated['tipo_veiculo'] = null;
+            $validated['tipo_veiculo_outro'] = trim((string)$request->input('tipo_veiculo_outro'));
+        } else {
+            $validated['tipo_veiculo_outro'] = null;
         }
 
-        $viatura->update($validated);
+        if ($combSelecionado === 'Outros') {
+            $request->validate([
+                'combustivel_outro' => ['required', 'string', 'max:255'],
+            ], [
+                'combustivel_outro.required' => 'Informe qual é o combustível quando selecionar "Outros".',
+            ]);
+            $validated['combustivel'] = null;
+            $validated['combustivel_outro'] = trim((string)$request->input('combustivel_outro'));
+        } else {
+            $validated['combustivel_outro'] = null;
+        }
 
-        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura atualizada com sucesso!');
+        $this->applyGarantiaBateria($validated);
+
+        $veiculo->update($validated);
+
+        return redirect()
+            ->route('admin.viaturas.index')
+            ->with('success', 'Viatura atualizada com sucesso!');
     }
 
-    /** DESTROY */
     public function destroy($id)
     {
-        $viatura = Veiculo::findOrFail($id);
-        $viatura->delete();
+        $veiculo = Veiculo::findOrFail($id);
+        $veiculo->delete();
 
-        return redirect()->route('admin.viaturas.index')->with('success', 'Viatura excluída com sucesso!');
+        return redirect()
+            ->route('admin.viaturas.index')
+            ->with('success', 'Viatura excluída com sucesso!');
     }
 
-    /**
-     * Edição restrita (P4).
-     */
     public function editarRestrito($id)
     {
         $viatura = Veiculo::with('opm')->findOrFail($id);
         $opms = Opm::all();
+
         return view('p4.viaturas.editar', compact('viatura', 'opms'));
     }
 
@@ -291,15 +505,51 @@ class VeiculoController extends Controller
     {
         $viatura = Veiculo::findOrFail($id);
 
-        $request->validate([
-            'quilometragem' => ['nullable', 'numeric', 'min:0'],
-            'observacao'    => ['nullable', 'string'],
-            'status'        => ['required', 'string', 'in:Ativo,Em Processo de Descarga'],
+        $this->normalizeRequest($request);
+
+        $statusOptions = [
+            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+        ];
+
+        $validated = $request->validate([
+            'status'         => ['required', 'string', Rule::in($statusOptions)],
             'situacao_carga' => ['nullable', 'string', 'max:255'],
+            'observacao'     => ['nullable', 'string'],
         ]);
 
-        $viatura->update($request->only(['quilometragem', 'observacao', 'status', 'situacao_carga']));
+        $viatura->update($validated);
 
-        return redirect()->route('p4.viaturas.index')->with('success', 'Viatura atualizada com sucesso!');
+        return redirect()
+            ->route('p4.viaturas.index')
+            ->with('success', 'Viatura atualizada com sucesso!');
+    }
+
+    public function probeDb(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'placa' => ['required', 'string', 'max:12'],
+            ]);
+        } catch (ValidationException $e) {
+            return back()
+                ->withErrors($e->errors())
+                ->withInput();
+        }
+
+        $placa = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string)($validated['placa'] ?? '')));
+
+        $veiculo = Veiculo::query()
+            ->whereRaw('UPPER(placa) = ?', [$placa])
+            ->first();
+
+        if (!$veiculo) {
+            return back()
+                ->withErrors(['placa' => 'Placa não encontrada no banco local.'])
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('admin.viaturas.edit', $veiculo->id)
+            ->with('status', 'Abrindo para edição...');
     }
 }

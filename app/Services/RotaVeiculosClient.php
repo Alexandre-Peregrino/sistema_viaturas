@@ -22,9 +22,12 @@ class RotaVeiculosClient
     protected ?string $bearer;
     protected ?string $pinIp;
 
-    // novos flags lidos do .env
+    // flags lidos do .env
     protected bool $asForm;
     protected bool $allowGet;
+
+    // NOVO: em local, permitir rodar sem token
+    protected bool $allowMissingBearerInLocal;
 
     public function __construct()
     {
@@ -52,18 +55,26 @@ class RotaVeiculosClient
         $this->bearer         = trim((string) env('ROTA_BEARER', ''));
         $this->pinIp          = trim((string) env('ROTA_PIN_IP', ''));
 
-        // novos
         $this->asForm   = filter_var(env('ROTA_VEICULOS_AS_FORM', false), FILTER_VALIDATE_BOOL);
         $this->allowGet = filter_var(env('ROTA_VEICULOS_ALLOW_GET', false), FILTER_VALIDATE_BOOL);
+
+        // NOVO: por padrão true em local (você pode controlar via .env)
+        $this->allowMissingBearerInLocal = filter_var(
+            env('ROTA_ALLOW_MISSING_BEARER_IN_LOCAL', true),
+            FILTER_VALIDATE_BOOL
+        );
     }
 
     protected function http(): PendingRequest
     {
-        if ($this->bearer === '') {
+        $isLocal = app()->environment('local');
+
+        // Em produção/homolog: exige token.
+        // Em local: permite sem token se a flag estiver true.
+        if ($this->bearer === '' && !($isLocal && $this->allowMissingBearerInLocal)) {
             throw new \RuntimeException('ROTA_BEARER ausente no .env (rode php artisan config:clear)');
         }
 
-        // monta o pacote de opções curl de uma vez (inclui RESOLVE se pinIp)
         $curl = [
             CURLOPT_IPRESOLVE             => CURL_IPRESOLVE_V4,
             CURLOPT_TCP_KEEPALIVE         => 1,
@@ -78,7 +89,6 @@ class RotaVeiculosClient
         if ($this->pinIp !== '') {
             $host = parse_url($this->veiculosUrl, PHP_URL_HOST);
             if ($host) {
-                // <<-- entra aqui, sem perder o resto das opções
                 $curl[CURLOPT_RESOLVE] = ["{$host}:443:{$this->pinIp}"];
             }
         }
@@ -87,7 +97,6 @@ class RotaVeiculosClient
             ->connectTimeout($this->connectTimeout)
             ->retry($this->retries, $this->retrySleepMs)
             ->acceptJson()
-            // respeita o .env
             ->when(!$this->asForm, fn ($r) => $r->asJson(), fn ($r) => $r->asForm())
             ->withHeaders([
                 'Accept'           => 'application/json',
@@ -100,8 +109,12 @@ class RotaVeiculosClient
                 'verify'           => $this->verifyTls,
                 'force_ip_resolve' => 'v4',
                 'curl'             => $curl,
-            ])
-            ->withToken($this->bearer, 'Bearer');
+            ]);
+
+        // NOVO: só adiciona Authorization se existir token
+        if ($this->bearer !== '') {
+            $req = $req->withToken($this->bearer, 'Bearer');
+        }
 
         return $req;
     }
@@ -150,7 +163,7 @@ class RotaVeiculosClient
         $payload['orgao_id'] = $payload['orgao_id'] ?? (int) env('ROTA_ORGAO_ID', 1);
 
         $resp = $this->allowGet
-            ? $this->http()->get($this->veiculosUrl, $payload)  // query string
+            ? $this->http()->get($this->veiculosUrl, $payload)   // query string
             : $this->http()->post($this->veiculosUrl, $payload); // body
 
         $resp->throw();
@@ -172,7 +185,10 @@ class RotaVeiculosClient
 
         try {
             $data = $this->consultarVeiculo($placa);
-            if ($data) {
+
+            // NOVO: só aceita se a API devolveu a mesma placa solicitada
+            $placaRetornada = strtoupper((string) ($data['placa'] ?? ''));
+            if ($data && $placaRetornada === $placa) {
                 return ['items' => [array_change_key_case($data, CASE_LOWER)]];
             }
         } catch (RequestException $e) {
@@ -188,6 +204,7 @@ class RotaVeiculosClient
 
         return ['items' => $items];
     }
+
 
     /** Mapper pro schema local */
     public function transformarParaSchemaLocal(array $r): array

@@ -16,29 +16,30 @@ class UsuarioController extends Controller
     {
         $this->ensureAdmin();
 
-        $busca = trim($request->input('busca'));
+        $busca = trim((string) $request->input('busca'));
 
         $usuarios = Usuario::with('opm')
             ->when($busca, function ($query, $busca) {
                 $busca = mb_strtolower($busca);
-                $query->whereRaw('LOWER(nome) LIKE ?', ["%{$busca}%"])
-                    ->orWhereRaw('cpf LIKE ?', ["%{$busca}%"])
-                    ->orWhereRaw('matricula LIKE ?', ["%{$busca}%"]);
+                $query->where(function ($q) use ($busca) {
+                    $q->whereRaw('LOWER(nome) LIKE ?', ["%{$busca}%"])
+                      ->orWhereRaw('cpf LIKE ?', ["%{$busca}%"])
+                      ->orWhereRaw('matricula LIKE ?', ["%{$busca}%"]);
+                });
             })
             ->orderBy('nome')
             ->paginate(20)
-            ->appends(['busca' => $busca]); // mantém a busca na paginação
+            ->appends(['busca' => $busca]);
 
         return view('admin.usuarios.index', compact('usuarios', 'busca'));
     }
-
 
     /**
      * Formulário de criação — desativado (sem criação manual).
      */
     public function create()
     {
-        abort(404); // rota removida; manter por segurança caso alguém chame direto
+        abort(404);
     }
 
     /**
@@ -51,56 +52,104 @@ class UsuarioController extends Controller
 
     /**
      * Formulário de edição (somente Admin).
-     * Observação: agora o e-mail é editável pelo admin.
      */
     public function edit(Usuario $usuario)
     {
         $this->ensureAdmin();
 
         $opms   = Opm::orderBy('sigla')->get();
-        $perfis = ['admin', 'p4'];
+        $perfis = ['admin', 'p4']; // se tiver super_admin, inclua aqui
 
         return view('admin.usuarios.edit', compact('usuario', 'opms', 'perfis'));
     }
 
     /**
-     * Atualiza permissões do usuário (somente Admin).
-     * Editáveis: perfil, opm_id, permitido (opcional) e email.
+     * Atualiza dados do usuário no banco local (somente Admin/Super Admin).
+     * Agora editáveis:
+     * - Dados pessoais/funcionais: nome, nome_guerra, matricula, titulo, posto_graduacao, numero_praca, rg_militar, telefone
+     * - Permissões locais: perfil, opm_id, permitido
+     * - E-mail
+     * - Controle: cadastro_completo, solicitacao_status (se você liberou na view)
+     *
+     * Observação: CPF segue somente leitura por padrão.
      */
     public function update(Request $request, Usuario $usuario)
     {
         $this->ensureAdmin();
 
         $validated = $request->validate([
+            // --- Dados do usuário (banco local) ---
+            'nome'            => ['required', 'string', 'max:255'],
+            'nome_guerra'     => ['nullable', 'string', 'max:120'],
+            'matricula'       => ['nullable', 'string', 'max:50'],
+            'titulo'          => ['nullable', 'string', 'max:80'],
+            'posto_graduacao' => ['nullable', 'string', 'max:80'],
+            'numero_praca'    => ['nullable', 'string', 'max:30'],
+            'rg_militar'      => ['nullable', 'string', 'max:50'],
+            'telefone'        => ['nullable', 'string', 'max:30'],
+
+            // (CPF travado)
+            // 'cpf' => ['nullable', 'string', 'max:14'],
+
+            // --- Permissões locais ---
             'perfil'    => ['required', Rule::in(['admin', 'p4'])],
             'opm_id'    => ['required', 'exists:opms,id'],
             'permitido' => ['sometimes', 'boolean'],
-            'email'     => ['required', 'string', 'email', 'max:255', Rule::unique('usuarios', 'email')->ignore($usuario->id)],
+
+            // --- Login/contato ---
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                Rule::unique('usuarios', 'email')->ignore($usuario->id),
+            ],
+
+            // --- Flags de cadastro (se existirem no seu schema) ---
+            'cadastro_completo'  => ['sometimes', 'boolean'],
+            'solicitacao_status' => ['nullable', 'string', 'max:50'],
         ], [
-            'perfil.required' => 'Selecione o perfil.',
-            'perfil.in'       => 'O perfil deve ser Admin ou P4.',
-            'opm_id.required' => 'Selecione a OPM.',
-            'opm_id.exists'   => 'A OPM selecionada não é válida.',
-            'email.required'  => 'O e-mail é obrigatório.',
-            'email.email'     => 'Informe um e-mail válido.',
-            'email.unique'    => 'Este e-mail já está em uso por outro usuário.',
+            'nome.required'      => 'O nome é obrigatório.',
+            'perfil.required'    => 'Selecione o perfil.',
+            'perfil.in'          => 'O perfil deve ser_toggle_admin ou P4.',
+            'opm_id.required'    => 'Selecione a OPM.',
+            'opm_id.exists'      => 'A OPM selecionada não é válida.',
+            'email.required'     => 'O e-mail é obrigatório.',
+            'email.email'        => 'Informe um e-mail válido.',
+            'email.unique'       => 'Este e-mail já está em uso por outro usuário.',
         ]);
 
-        // Atualiza sempre
-        $usuario->perfil = $validated['perfil'];
-        $usuario->opm_id = $validated['opm_id'];
-        $usuario->email  = strtolower($validated['email']);
+        // Normalizações simples
+        $validated['email'] = strtolower($validated['email']);
+
+        // Se quiser padronizar nome_guerra em maiúsculas:
+        if (array_key_exists('nome_guerra', $validated) && $validated['nome_guerra'] !== null) {
+            $validated['nome_guerra'] = mb_strtoupper($validated['nome_guerra']);
+        }
 
         // Atualiza "permitido" apenas se vier no request
         if ($request->has('permitido')) {
-            $usuario->permitido = $request->boolean('permitido');
+            $validated['permitido'] = $request->boolean('permitido');
+        } else {
+            unset($validated['permitido']);
         }
 
+        // Atualiza cadastro_completo apenas se vier no request
+        if ($request->has('cadastro_completo')) {
+            $validated['cadastro_completo'] = $request->boolean('cadastro_completo');
+        } else {
+            unset($validated['cadastro_completo']);
+        }
+
+        // CPF travado (garantia extra)
+        unset($validated['cpf']);
+
+        $usuario->fill($validated);
         $usuario->save();
 
         return redirect()
             ->route('admin.usuarios.index')
-            ->with('success', 'Permissões e e-mail atualizados com sucesso!');
+            ->with('success', 'Usuário atualizado com sucesso!');
     }
 
     /**

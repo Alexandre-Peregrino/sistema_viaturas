@@ -19,7 +19,7 @@ class RegisterLdapController extends Controller
     {
         $data = $request->validate([
             'cpf'      => ['required','string','regex:/^\d{11}$/'],
-            'nome'     => ['required','string','max:150'],
+            // 'nome'  => removido (vamos priorizar o AD)
             'password' => ['required','string','min:4'], // senha do AD (não será salva)
         ], [
             'cpf.regex' => 'Informe o CPF com 11 dígitos (somente números).',
@@ -34,31 +34,35 @@ class RegisterLdapController extends Controller
                          ->withInput($request->except('password'));
         }
 
-        // 2) (Opcional) Busca atributos no AD p/ enriquecer cadastro
-        $attrs = method_exists($ldap, 'searchByCpf') ? ($ldap->searchByCpf($cpf) ?? []) : [];
-        $email      = $attrs['email']     ?? null;
-        $matricula  = $attrs['matricula'] ?? null;
-        $unidadeStr = $attrs['unidade']   ?? null;
+        // 2) Busca atributos no AD (conta de serviço)
+        $attrs = $ldap->searchByCpfService($cpf) ?? [];
 
-        // Tentar mapear unidade do AD para sua tabela OPM (se existir correspondência)
+        $nome      = $attrs['nome']      ?? null;
+        $email     = $attrs['email']     ?? null;
+        $matricula = $attrs['matricula'] ?? null;
+        $unidadeStr = $attrs['unidade']  ?? null;
+
+        // 3) Mapeamento de OPM (CONSERVADOR para não "furar")
+        // Se você não confia no campo "unidade", é melhor deixar null.
         $opmId = null;
         if ($unidadeStr) {
             $opmId = Opm::query()
-                ->where('sigla', $unidadeStr)
-                ->orWhere('nome', 'ilike', '%'.$unidadeStr.'%') // Postgres
+                ->where('sigla', $unidadeStr) // somente match exato
                 ->value('id');
         }
 
-        // 3) Cria (ou atualiza nome/email/matricula) o usuário local
+        // 4) Cria/atualiza usuário local mínimo
+        // - permitido = false: aguarda liberação do admin
+        // - perfil padrão: ajuste conforme seu gate/policy (P4 vs p4)
         $usuario = Usuario::updateOrCreate(
             ['cpf' => $cpf],
             [
-                'nome'      => $data['nome'],                 // usa o que veio do formulário
+                'nome'      => $nome ?? 'Usuário', // fallback se AD não retornar
                 'email'     => $email,
                 'matricula' => $matricula,
                 'opm_id'    => $opmId,
-                'perfil'    => 'p4',                          // padrão (admin ajusta depois)
-                'permitido' => false,                         // aguarda liberação do admin
+                'perfil'    => 'P4',
+                'permitido' => false,
             ]
         );
 

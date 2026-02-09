@@ -9,19 +9,23 @@ class Opm extends Model
 {
     use HasFactory;
 
+    protected $table = 'opms';
+
     /**
-     * Deixei 'id' nos fillables para permitir upsert com o id externo do RotaWeb.
-     * Campos extras (cpr/area/cidade/municipio_id) continuam para uso interno.
+     * Campos compatíveis com:
+     * - seu CRUD (Admin/OpmController)
+     * - importações (quando precisar)
      */
     protected $fillable = [
-        'id',        // id vindo do RotaWeb (opcional)
+        'id',            // opcional (se algum dia fizer upsert com id externo)
         'sigla',
-        'nome',      // vem do RotaWeb
-        'cpr',       // usamos como “região”
+        'nome',
+        'cpr',
         'area',
         'cidade',
         'municipio_id',
-        // 'regiao_id', // se não for usar, pode remover do fillable; deixar aqui é opcional
+        'regiao_id',
+        'parent_opm_id',
     ];
 
     /* -------------------- Relacionamentos -------------------- */
@@ -33,6 +37,7 @@ class Opm extends Model
 
     public function usuarios()
     {
+        // Considerando que seu model é App\Models\Usuario
         return $this->hasMany(Usuario::class);
     }
 
@@ -41,12 +46,18 @@ class Opm extends Model
         return $this->belongsTo(Municipio::class);
     }
 
-   
+    public function parent()
+    {
+        return $this->belongsTo(Opm::class, 'parent_opm_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Opm::class, 'parent_opm_id');
+    }
+
     /* ----------------------- Scopes úteis ----------------------- */
 
-    /**
-     * Filtra por CPR (região).
-     */
     public function scopeCpr($query, ?string $cpr)
     {
         if (!empty($cpr)) {
@@ -55,13 +66,12 @@ class Opm extends Model
         return $query;
     }
 
-    /* ---------------------- Helpers opcionais ---------------------- */
+    /* ---------------------- Helpers ---------------------- */
 
-    /**
-     * Exibe "SIGLA — Nome" para selects e tabelas.
-     */
     public function getDisplayNameAttribute(): string
     {
-        return trim(($this->sigla ?? '') . ' — ' . ($this->nome ?? ''));
+        $sigla = trim((string) $this->sigla);
+        $nome  = trim((string) ($this->nome ?? ''));
+        return $nome !== '' ? "{$sigla} — {$nome}" : $sigla;
     }
 }

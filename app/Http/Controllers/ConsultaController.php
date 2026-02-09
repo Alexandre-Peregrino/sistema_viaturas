@@ -1,0 +1,701 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Opm;
+use App\Models\Veiculo;
+use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class ConsultaController extends Controller
+{
+    private function user()
+    {
+        return auth()->user();
+    }
+
+    private function isAdmin(): bool
+    {
+        $u = $this->user();
+        return $u && method_exists($u, 'isAdmin') ? (bool) $u->isAdmin() : false;
+    }
+
+    private function isP4(): bool
+    {
+        $u = $this->user();
+        return $u && method_exists($u, 'isP4') ? (bool) $u->isP4() : false;
+    }
+
+    private function userOpmId(): ?int
+    {
+        $u = $this->user();
+        if (!$u) return null;
+
+        if (isset($u->opm_id) && is_numeric($u->opm_id)) {
+            return (int) $u->opm_id;
+        }
+
+        if (method_exists($u, 'opm') && $u->opm) {
+            return (int) $u->opm->id;
+        }
+
+        return null;
+    }
+
+    /**
+     * GET /consultas/opms (JSON)
+     */
+    public function opms(Request $request)
+    {
+        $q      = trim((string) $request->query('q', ''));
+        $cpr    = trim((string) $request->query('cpr', ''));
+        $cidade = trim((string) $request->query('cidade', ''));
+        $limit  = (int) $request->query('limit', 50);
+        $limit  = ($limit > 0 && $limit <= 200) ? $limit : 50;
+
+        $query = Opm::query()
+            ->select(['id', 'sigla', 'nome', 'cpr', 'cidade'])
+            ->when($q !== '', function ($qbuilder) use ($q) {
+                $qbuilder->where(function ($w) use ($q) {
+                    $w->where('sigla', 'ILIKE', "%{$q}%")
+                        ->orWhere('nome', 'ILIKE', "%{$q}%");
+                });
+            })
+            ->when($cpr !== '', fn($qb) => $qb->where('cpr', $cpr))
+            ->when($cidade !== '', fn($qb) => $qb->where('cidade', $cidade))
+            ->orderBy('sigla')
+            ->limit($limit);
+
+        return response()->json($query->get());
+    }
+
+    /**
+     * GET /consultas/viaturas
+     * - HTML (default)
+     * - JSON quando Accept: application/json ou ?format=json
+     * - CSV quando ?format=csv
+     */
+    public function viaturas(Request $request)
+    {
+        $format = (string) $request->query('format', '');
+
+        if ($format === 'csv') {
+            return $this->viaturasCsv($request);
+        }
+
+        if ($request->wantsJson() || $request->expectsJson() || $format === 'json') {
+            return $this->viaturasJson($request);
+        }
+
+        return $this->viaturasHtml($request);
+    }
+
+    /**
+     * JSON simples (para usos futuros/AJAX)
+     */
+    private function viaturasJson(Request $request)
+    {
+        $q     = trim((string) $request->query('q', ''));
+        $limit = (int) $request->query('limit', 30);
+        $limit = ($limit > 0 && $limit <= 200) ? $limit : 30;
+
+        $query = Veiculo::query()
+            ->select([
+                'id', 'placa', 'prefixo',
+                'marca_modelo', 'marca', 'modelo',
+                'tipo_veiculo', 'combustivel', 'tracao',
+                'status', 'ativo',
+                'ano_fabricacao', 'ano_modelo',
+                'cidade', 'area',
+                'opm_id',
+            ])
+            ->with(['opm:id,sigla,nome,cpr,cidade'])
+            ->when($q !== '', function ($qb) use ($q) {
+                $qb->where(function ($w) use ($q) {
+                    $w->where('placa', 'ILIKE', "%{$q}%")
+                        ->orWhere('prefixo', 'ILIKE', "%{$q}%")
+                        ->orWhere('marca_modelo', 'ILIKE', "%{$q}%")
+                        ->orWhere('marca', 'ILIKE', "%{$q}%")
+                        ->orWhere('modelo', 'ILIKE', "%{$q}%");
+                });
+            });
+
+        // P4 restrito à própria OPM
+        if ($this->isP4() && !$this->isAdmin()) {
+            $userOpmId = $this->userOpmId();
+            if ($userOpmId) {
+                $query->where('opm_id', $userOpmId);
+            }
+        }
+
+        return response()->json(
+            $query->orderBy('prefixo')->limit($limit)->get()
+        );
+    }
+
+    /**
+     * HTML (tela principal)
+     */
+    private function viaturasHtml(Request $request)
+    {
+        $filters = $this->readFilters($request);
+
+        // Permite "" (sem agrupamento) se você quiser
+        $group = (string) $request->query('group', 'opm');
+
+        $groupAllowed = ['', 'opm', 'cpr', 'opm_cidade', 'viatura_cidade', 'area', 'ano_fab', 'ano_mod', 'marca', 'tracao'];
+        if (!in_array($group, $groupAllowed, true)) $group = 'opm';
+
+        $perPage = (int) $request->query('per_page', 20);
+        $perPage = ($perPage >= 10 && $perPage <= 200) ? $perPage : 20;
+
+        $base = $this->buildBaseQuery($filters);
+
+        $viaturas = (clone $base)
+            ->orderBy('prefixo')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $summary = null;
+        if ($group !== '') {
+            $summary = $this->groupSummary(clone $base, $group);
+        }
+
+        $options = $this->filterOptionsForViaturas();
+        $activeChips = $this->makeActiveChips($filters);
+
+        return view('consultas.viaturas.index', [
+            'filters'     => $filters,
+            'group'       => $group,
+            'perPage'     => $perPage,
+            'viaturas'    => $viaturas,
+            'summary'     => $summary,
+            'options'     => $options,
+            'activeChips' => $activeChips,
+        ]);
+    }
+
+    /**
+     * CSV do resultado filtrado
+     */
+    private function viaturasCsv(Request $request): StreamedResponse
+    {
+        $filters = $this->readFilters($request);
+
+        $base = $this->buildBaseQuery($filters)
+            ->orderBy('prefixo');
+
+        $filename = 'consulta_viaturas_' . now()->format('Ymd_His') . '.csv';
+
+        $response = new StreamedResponse(function () use ($base) {
+            $out = fopen('php://output', 'w');
+
+            // BOM para Excel PT-BR (ajuda acentos)
+            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            fputcsv($out, [
+                'prefixo', 'placa', 'marca', 'modelo', 'marca_modelo',
+                'ano_fabricacao', 'ano_modelo',
+                'tracao', 'combustivel', 'tipo_veiculo',
+                'cidade_viatura', 'area',
+                'opm_sigla', 'opm_nome', 'opm_cpr', 'opm_cidade',
+                'ativo', 'status'
+            ], ';');
+
+            $base->chunk(1000, function ($rows) use ($out) {
+                foreach ($rows as $v) {
+                    fputcsv($out, [
+                        $v->prefixo,
+                        $v->placa,
+                        $v->marca,
+                        $v->modelo,
+                        $v->marca_modelo,
+                        $v->ano_fabricacao,
+                        $v->ano_modelo,
+                        $v->tracao,
+                        $v->combustivel,
+                        $v->tipo_veiculo,
+                        $v->cidade,
+                        $v->area,
+                        optional($v->opm)->sigla,
+                        optional($v->opm)->nome,
+                        optional($v->opm)->cpr,
+                        optional($v->opm)->cidade,
+                        $v->ativo ? 'SIM' : 'NAO',
+                        $v->status,
+                    ], ';');
+                }
+            });
+
+            fclose($out);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv; charset=UTF-8');
+        $response->headers->set('Content-Disposition', "attachment; filename=\"{$filename}\"");
+
+        return $response;
+    }
+
+    /**
+     * Leitura/normalização de filtros (arrays sem vazios)
+     * Aqui também removemos sentinelas "__ALL__" etc, para não "furar" filtros numéricos.
+     */
+    private function readFilters(Request $request): array
+    {
+        $filters = [
+            'q'               => trim((string) $request->query('q', '')),
+
+            'opm_ids'         => Arr::wrap($request->query('opm_ids', [])),
+            'cprs'            => Arr::wrap($request->query('cprs', [])),
+            'opm_cidades'     => Arr::wrap($request->query('opm_cidades', [])),
+
+            'viatura_cidades' => Arr::wrap($request->query('viatura_cidades', [])),
+            'areas'           => Arr::wrap($request->query('areas', [])),
+
+            'anos_fab'        => Arr::wrap($request->query('anos_fab', [])),
+            'anos_mod'        => Arr::wrap($request->query('anos_mod', [])),
+
+            'marcas'          => Arr::wrap($request->query('marcas', [])),
+            'modelos'         => Arr::wrap($request->query('modelos', [])),
+            'tracoes'         => Arr::wrap($request->query('tracoes', [])),
+            'combustiveis'    => Arr::wrap($request->query('combustiveis', [])),
+            'tipos'           => Arr::wrap($request->query('tipos', [])),
+
+            'status'          => Arr::wrap($request->query('status', [])),
+            'ativo'           => $request->query('ativo', ''), // '', '1', '0'
+        ];
+
+        foreach ($filters as $k => $v) {
+            if (is_array($v)) {
+                // remove vazios
+                $v = array_values(array_filter($v, fn($x) => (string) $x !== ''));
+
+                // remove sentinela "__ALL__" (TODOS) — não deve virar filtro
+                $v = array_values(array_filter($v, fn($x) => (string) $x !== '__ALL__'));
+
+                $filters[$k] = $v;
+            }
+        }
+
+        // Trações: mantém "__NOT_4X4__" se existir (é um especial válido)
+        // "__ALL__" já foi removido acima
+        if (!empty($filters['tracoes'])) {
+            $filters['tracoes'] = array_values($filters['tracoes']);
+        }
+
+        return $filters;
+    }
+
+    /**
+     * Query base com todos os filtros combináveis.
+     * Usa apenas colunas que existem no schema real.
+     */
+    private function buildBaseQuery(array $filters)
+    {
+        $base = Veiculo::query()
+            ->with(['opm:id,sigla,nome,cpr,cidade'])
+            ->select([
+                'id', 'placa', 'prefixo',
+                'marca_modelo', 'marca', 'modelo',
+                'tipo_veiculo', 'combustivel', 'tracao',
+                'status', 'ativo',
+                'ano_fabricacao', 'ano_modelo',
+                'cidade', 'area',
+                'opm_id',
+            ])
+
+            // Busca rápida (placa/prefixo/marca/modelo/tração/comb/… + OPM)
+            ->when($filters['q'] !== '', function ($qb) use ($filters) {
+                $q = trim((string) $filters['q']);
+
+                $qb->where(function ($w) use ($q) {
+                    $w->where('placa', 'ILIKE', "%{$q}%")
+                        ->orWhere('prefixo', 'ILIKE', "%{$q}%")
+                        ->orWhere('marca_modelo', 'ILIKE', "%{$q}%")
+                        ->orWhere('marca', 'ILIKE', "%{$q}%")
+                        ->orWhere('modelo', 'ILIKE', "%{$q}%")
+                        ->orWhere('tipo_veiculo', 'ILIKE', "%{$q}%")
+                        ->orWhere('combustivel', 'ILIKE', "%{$q}%")
+                        ->orWhere('tracao', 'ILIKE', "%{$q}%")
+                        ->orWhere('cidade', 'ILIKE', "%{$q}%")
+                        ->orWhere('area', 'ILIKE', "%{$q}%")
+                        ->orWhere('chassi', 'ILIKE', "%{$q}%")
+                        ->orWhere('renavam', 'ILIKE', "%{$q}%")
+                        ->orWhere('numero_serie_radio', 'ILIKE', "%{$q}%");
+                });
+
+                // Busca também na OPM (sigla/nome)
+                $qb->orWhereHas('opm', function ($opmQ) use ($q) {
+                    $opmQ->where('sigla', 'ILIKE', "%{$q}%")
+                        ->orWhere('nome', 'ILIKE', "%{$q}%");
+                });
+            })
+
+            // OPM
+            ->when(!empty($filters['opm_ids']), fn($qb) => $qb->whereIn('opm_id', array_map('intval', $filters['opm_ids'])))
+
+            // Tipo
+            ->when(!empty($filters['tipos']), fn($qb) => $qb->whereIn('tipo_veiculo', $filters['tipos']))
+
+            // Combustível (agora seguro: "__ALL__" já foi removido em readFilters)
+            ->when(!empty($filters['combustiveis']), fn($qb) => $qb->whereIn('combustivel', $filters['combustiveis']))
+
+            // Tração: suporta especial "__NOT_4X4__"
+            ->when(!empty($filters['tracoes']), function ($qb) use ($filters) {
+                $vals = $filters['tracoes'];
+
+                if (in_array('__NOT_4X4__', $vals, true)) {
+                    $qb->whereNotNull('tracao')
+                        ->where('tracao', '<>', '')
+                        ->where('tracao', 'not ilike', '%4x4%');
+                    return;
+                }
+
+                // valores reais (remove especial se vier misturado)
+                $vals = array_values(array_filter($vals, fn($v) => $v !== '__NOT_4X4__'));
+                if (!empty($vals)) {
+                    $qb->whereIn('tracao', $vals);
+                }
+            })
+
+            // Status
+            ->when(!empty($filters['status']), fn($qb) => $qb->whereIn('status', $filters['status']))
+
+            // Ano fabricação/modelo (seguro: "__ALL__" já removido antes de intval)
+            ->when(!empty($filters['anos_fab']), fn($qb) => $qb->whereIn('ano_fabricacao', array_map('intval', $filters['anos_fab'])))
+            ->when(!empty($filters['anos_mod']), fn($qb) => $qb->whereIn('ano_modelo', array_map('intval', $filters['anos_mod'])))
+
+            // Marca/modelo
+            ->when(!empty($filters['marcas']), fn($qb) => $qb->whereIn('marca', $filters['marcas']))
+            ->when(!empty($filters['modelos']), fn($qb) => $qb->whereIn('modelo', $filters['modelos']))
+
+            // Cidade/Área
+            ->when(!empty($filters['viatura_cidades']), fn($qb) => $qb->whereIn('cidade', $filters['viatura_cidades']))
+            ->when(!empty($filters['areas']), fn($qb) => $qb->whereIn('area', $filters['areas']))
+
+            // Ativo
+            ->when(($filters['ativo'] ?? '') !== '', function ($qb) use ($filters) {
+                $qb->where('ativo', $filters['ativo'] === '1');
+            });
+
+        // filtros baseados em campos da OPM (CPR / cidade da unidade)
+        if (!empty($filters['cprs']) || !empty($filters['opm_cidades'])) {
+            $base->whereHas('opm', function ($q) use ($filters) {
+                if (!empty($filters['cprs'])) {
+                    $q->whereIn('cpr', $filters['cprs']);
+                }
+                if (!empty($filters['opm_cidades'])) {
+                    $q->whereIn('cidade', $filters['opm_cidades']);
+                }
+            });
+        }
+
+        // P4 restrito à própria OPM
+        if ($this->isP4() && !$this->isAdmin()) {
+            $userOpmId = $this->userOpmId();
+            if ($userOpmId) {
+                $base->where('opm_id', $userOpmId);
+            }
+        }
+
+        return $base;
+    }
+
+    /**
+     * Resumo agrupado + links de drill-down (clicar aplica filtro)
+     */
+    private function groupSummary($baseQuery, string $group): array
+    {
+        $q = $baseQuery->getQuery();
+        $q->orders = null;
+
+        $total = (clone $baseQuery)->count();
+
+        $builder = Veiculo::query()->fromSub($q, 'v');
+
+        $rows = collect();
+        $label = 'Resumo';
+
+        switch ($group) {
+            case 'opm':
+                $label = 'Por OPM';
+                $rows = $builder
+                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
+                    ->selectRaw("
+                        v.opm_id as key_id,
+                        COALESCE(o.sigla,'(sem OPM)') as label,
+                        COUNT(*) as total
+                    ")
+                    ->groupBy('v.opm_id', 'o.sigla')
+                    ->orderBy('label') // ✅ ordem alfabética
+                    ->limit(200)
+                    ->get();
+                break;
+
+
+            case 'cpr':
+                $label = 'Por CPR';
+                $rows = $builder
+                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
+                    ->selectRaw("COALESCE(o.cpr,'(sem CPR)') as label, COUNT(*) as total")
+                    ->groupBy('o.cpr')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'opm_cidade':
+                $label = 'Por Cidade (OPM)';
+                $rows = $builder
+                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
+                    ->selectRaw("COALESCE(o.cidade,'(sem cidade)') as label, COUNT(*) as total")
+                    ->groupBy('o.cidade')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'viatura_cidade':
+                $label = 'Por Cidade (Viatura)';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.cidade,'(sem cidade)') as label, COUNT(*) as total")
+                    ->groupBy('v.cidade')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'area':
+                $label = 'Por Área';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.area,'(sem área)') as label, COUNT(*) as total")
+                    ->groupBy('v.area')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'ano_fab':
+                $label = 'Por Ano de Fabricação';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.ano_fabricacao::text,'(sem ano)') as label, COUNT(*) as total")
+                    ->groupBy('v.ano_fabricacao')
+                    ->orderByRaw("v.ano_fabricacao NULLS LAST")
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'ano_mod':
+                $label = 'Por Ano de Modelo';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.ano_modelo::text,'(sem ano)') as label, COUNT(*) as total")
+                    ->groupBy('v.ano_modelo')
+                    ->orderByRaw("v.ano_modelo NULLS LAST")
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'marca':
+                $label = 'Por Marca';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.marca,'(sem marca)') as label, COUNT(*) as total")
+                    ->groupBy('v.marca')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+
+            case 'tracao':
+                $label = 'Por Tração';
+                $rows = $builder
+                    ->selectRaw("COALESCE(v.tracao,'(sem tração)') as label, COUNT(*) as total")
+                    ->groupBy('v.tracao')
+                    ->orderByDesc('total')
+                    ->limit(200)
+                    ->get();
+                break;
+        }
+
+        // links drill-down
+        $rows = $rows->map(function ($r) use ($group) {
+            $r->drill_url = $this->makeDrillUrl($group, $r);
+            return $r;
+        });
+
+        return ['total' => $total, 'rows' => $rows, 'label' => $label];
+    }
+
+    private function makeDrillUrl(string $group, $row): string
+    {
+        $params = request()->query();
+
+        $addToArrayParam = function (string $key, $value) use (&$params) {
+            $current = Arr::wrap($params[$key] ?? []);
+            $current = array_map('strval', $current);
+            $val = (string) $value;
+
+            if ($val === '' || str_starts_with($val, '(sem ')) return;
+
+            if (!in_array($val, $current, true)) {
+                $current[] = $val;
+            }
+            $params[$key] = $current;
+        };
+
+        switch ($group) {
+            case 'opm':
+                if (!empty($row->key_id)) $addToArrayParam('opm_ids', $row->key_id);
+                break;
+            case 'cpr':
+                $addToArrayParam('cprs', $row->label);
+                break;
+            case 'opm_cidade':
+                $addToArrayParam('opm_cidades', $row->label);
+                break;
+            case 'viatura_cidade':
+                $addToArrayParam('viatura_cidades', $row->label);
+                break;
+            case 'area':
+                $addToArrayParam('areas', $row->label);
+                break;
+            case 'ano_fab':
+                $addToArrayParam('anos_fab', $row->label);
+                break;
+            case 'ano_mod':
+                $addToArrayParam('anos_mod', $row->label);
+                break;
+            case 'marca':
+                $addToArrayParam('marcas', $row->label);
+                break;
+            case 'tracao':
+                $addToArrayParam('tracoes', $row->label);
+                break;
+        }
+
+        return route('consultas.viaturas', $params);
+    }
+
+    /**
+     * Opções com contagem (para UX melhor)
+     */
+    private function filterOptionsForViaturas(): array
+    {
+        $opmIdsQuery = Veiculo::query()->select('opm_id')->distinct();
+
+        if ($this->isP4() && !$this->isAdmin()) {
+            $userOpmId = $this->userOpmId();
+            if ($userOpmId) $opmIdsQuery->where('opm_id', $userOpmId);
+        }
+
+        $opmIdsInUse = $opmIdsQuery->pluck('opm_id')->map(fn($x) => (int) $x)->all();
+
+        $opms = Opm::query()
+            ->whereIn('id', $opmIdsInUse)
+            ->orderBy('sigla')
+            ->get(['id', 'sigla', 'nome', 'cpr', 'cidade']);
+
+        $cprs = Opm::query()
+            ->whereIn('id', $opmIdsInUse)
+            ->whereNotNull('cpr')->where('cpr', '<>', '')
+            ->distinct()->orderBy('cpr')->pluck('cpr');
+
+        $opmCidades = Opm::query()
+            ->whereIn('id', $opmIdsInUse)
+            ->whereNotNull('cidade')->where('cidade', '<>', '')
+            ->distinct()->orderBy('cidade')->pluck('cidade');
+
+        $listTextWithCount = function (string $col, int $limit = 200) {
+            return Veiculo::query()
+                ->whereNotNull($col)
+                ->where($col, '<>', '')
+                ->selectRaw("{$col} as value, COUNT(*) as total")
+                ->groupBy($col)
+                ->orderByDesc('total')
+                ->limit($limit)
+                ->get();
+        };
+
+        $listNumberWithCount = function (string $col, int $limit = 200) {
+            return Veiculo::query()
+                ->whereNotNull($col)
+                ->selectRaw("{$col} as value, COUNT(*) as total")
+                ->groupBy($col)
+                ->orderByRaw("{$col} NULLS LAST")
+                ->limit($limit)
+                ->get();
+        };
+
+        return [
+            'opms'        => $opms,
+            'cprs'        => $cprs,
+            'opm_cidades' => $opmCidades,
+
+            'viatura_cidades' => $listTextWithCount('cidade', 200),
+            'areas'           => $listTextWithCount('area', 200),
+
+            'tipos'        => $listTextWithCount('tipo_veiculo', 200),
+            'combustiveis' => $listTextWithCount('combustivel', 200),
+            'tracoes'      => $listTextWithCount('tracao', 200),
+            'status'       => $listTextWithCount('status', 200),
+
+            'anos_fab'     => $listNumberWithCount('ano_fabricacao', 200),
+            'anos_mod'     => $listNumberWithCount('ano_modelo', 200),
+
+            'marcas'       => $listTextWithCount('marca', 200),
+            'modelos'      => $listTextWithCount('modelo', 200),
+        ];
+    }
+
+    private function makeActiveChips(array $filters): array
+    {
+        $chips = [];
+
+        $add = function (string $label, $value) use (&$chips) {
+            $v = is_array($value) ? implode(', ', $value) : (string) $value;
+            $v = trim($v);
+            if ($v === '') return;
+            $chips[] = ['label' => $label, 'value' => $v];
+        };
+
+        $add('Busca', $filters['q'] ?? '');
+
+        // OPM: mostrar SIGLA no chip
+        $opmIds = $filters['opm_ids'] ?? [];
+        if (!empty($opmIds)) {
+            $siglas = Opm::query()
+                ->whereIn('id', array_map('intval', $opmIds))
+                ->orderBy('sigla')
+                ->pluck('sigla')
+                ->all();
+
+            $add('OPM', $siglas);
+        }
+
+        $add('CPR', $filters['cprs'] ?? []);
+        $add('Cidade (OPM)', $filters['opm_cidades'] ?? []);
+
+        $add('Cidade (Viatura)', $filters['viatura_cidades'] ?? []);
+        $add('Área', $filters['areas'] ?? []);
+
+        $add('Ano Fab', $filters['anos_fab'] ?? []);
+        $add('Ano Mod', $filters['anos_mod'] ?? []);
+
+        $add('Marca', $filters['marcas'] ?? []);
+        $add('Modelo', $filters['modelos'] ?? []);
+
+        // Tração: remove especial no chip
+        $tr = array_values(array_filter($filters['tracoes'] ?? [], fn($v) => $v !== '__NOT_4X4__'));
+        $add('Tração', $tr);
+
+        $add('Combustível', $filters['combustiveis'] ?? []);
+        $add('Tipo', $filters['tipos'] ?? []);
+        $add('Status', $filters['status'] ?? []);
+
+        if (($filters['ativo'] ?? '') !== '') {
+            $add('Ativo', ($filters['ativo'] === '1') ? 'Somente ativos' : 'Somente inativos');
+        }
+
+        return $chips;
+    }
+}

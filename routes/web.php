@@ -1,12 +1,14 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\OpmController;
 
 // Auth
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterLdapController;
 
 // Admin controllers (escopo global)
+use App\Http\Controllers\ConsultaController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VeiculoController;
 use App\Http\Controllers\ManutencaoController;
@@ -16,11 +18,23 @@ use App\Http\Controllers\MarcaModeloController;
 use App\Http\Controllers\RelatorioUnificadoController;
 use App\Http\Controllers\SisgpController;
 use App\Http\Controllers\Admin\VeiculoSyncController;
+use App\Http\Controllers\Admin\UsuariosLdapController;
+
+// Perfil (completar cadastro)
+use App\Http\Controllers\PerfilController;
 
 // P4 controllers (escopo OPM do usuário)
 use App\Http\Controllers\P4\ViaturaController as P4ViaturaController;
 use App\Http\Controllers\P4\RadioController as P4RadioController;
 use App\Http\Controllers\P4\ManutencaoController as P4ManutencaoController;
+
+// Middlewares do "web" que geram cookie/sessão/CSRF (mantidos)
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -38,24 +52,76 @@ Route::get('/funcionalidades', fn() => view('funcionalidades'))->name('funcional
 
 /*
 |--------------------------------------------------------------------------
-| Rotas Protegidas (auth)
+| HOME restrita (logado, mas ainda sem acesso)
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth')->get('/home-restrita', function () {
+    return view('home_restrita');
+})->name('home.restrita');
+
+/*
+|--------------------------------------------------------------------------
+| Completar Cadastro (logado)
 |--------------------------------------------------------------------------
 */
 Route::middleware('auth')->group(function () {
+    Route::get('/perfil/completar', [PerfilController::class, 'completar'])->name('perfil.completar');
+    Route::post('/perfil/completar', [PerfilController::class, 'store'])->name('perfil.completar.store');
+});
+
+
+/*
+| ------------------------------------------------------------------------
+| Consultas (sem views) – (Admin + P4) OU Debug Token (ambiente local)
+|--------------------------------------------------------------------------
+| Fora do middleware 'auth', pois LDAP não funciona fora da rede do Estado.
+| Aqui entra o middleware 'auth_or_debug'.
+*/
+Route::prefix('consultas')
+    ->name('consultas.')
+    ->middleware('auth_or_debug')
+    ->group(function () {
+        Route::get('/viaturas', [ConsultaController::class, 'viaturas'])->name('viaturas');
+        Route::get('/opms', [ConsultaController::class, 'opms'])->name('opms');
+
+        // Dashboard admin (se logado, você pode validar admin no controller)
+        Route::get('/dashboard/admin', [ConsultaController::class, 'dashboardAdmin'])->name('dashboard.admin');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Rotas Protegidas (auth + cadastro completo + aprovado)
+|--------------------------------------------------------------------------
+|
+| 1) cadastro_completo: força completar cadastro
+| 2) permitido: bloqueia acesso até admin liberar
+|
+*/
+Route::middleware(['auth', 'cadastro_completo', 'permitido'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
     | Rotas ADMIN (can:isAdmin)
     |--------------------------------------------------------------------------
-    |
-    | Admin mantém os controllers “globais”, sem filtro por OPM.
     */
     Route::middleware('can:isAdmin')->group(function () {
+
+        // LDAP (Admin) — endpoints para a tela /admin/usuarios
+        Route::get('/admin/usuarios/ldap/search', [UsuariosLdapController::class, 'search'])
+            ->name('admin.usuarios.ldap.search');
+
+        Route::post('/admin/usuarios/ldap/import', [UsuariosLdapController::class, 'import'])
+            ->name('admin.usuarios.ldap.import');
+
+        // OPMs (Admin)
+        Route::resource('/admin/opms', OpmController::class)
+            ->except(['show'])
+            ->names('admin.opms');
+
         // Usuários
         Route::resource('/admin/usuarios', UsuarioController::class)
-            ->except(['show', 'create', 'store']) // impede criação manual
+            ->except(['show', 'create', 'store'])
             ->names('admin.usuarios');
-
 
         // Viaturas (CRUD + extras)
         Route::resource('/admin/viaturas', VeiculoController::class)
@@ -68,9 +134,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/viaturas/por-opm', [VeiculoController::class, 'porOpm'])
             ->name('admin.viaturas.por_opm');
 
-        // ROTA: consulta (pré-visualização) e sincronização
-        Route::post('/admin/viaturas/rota/probe', [VeiculoSyncController::class, 'probe'])
-            ->name('admin.viaturas.rota.probe');
+        /**
+         * NOVO: consulta simples no BD (por placa) para a tela /admin/viaturas
+         * (não depende do ROTA)
+         */
+        Route::post('/admin/viaturas/db/probe', [VeiculoController::class, 'probeDb'])
+            ->name('admin.viaturas.db.probe');
 
         // Manutenções
         Route::resource('/admin/manutencoes', ManutencaoController::class)
@@ -132,11 +201,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/viaturas/por-cpr', [RelatorioController::class, 'viaturasPorCpr'])
             ->name('admin.viaturas.por_cpr');
 
-        /* ------------------------------------------------------------------
-         | Relatórios RotaWeb (TELAS internas) – NOVO
-         | Estas rotas apresentam formulários e tabelas consumindo o serviço
-         | App\Services\RotawebClient diretamente no backend.
-         ------------------------------------------------------------------ */
         Route::get('/admin/relatorios/rotaweb/efetivo-previsto/filtros', [RelatorioController::class, 'rotawebEfetivoPrevistoForm'])
             ->name('admin.relatorios.rotaweb.efetivo_previsto.filtros');
 
@@ -158,25 +222,18 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     | Rotas P4 (can:isP4)
     |--------------------------------------------------------------------------
-    |
-    | Aqui entram os controllers específicos do P4
-    | que já aplicam filtro por OPM + Policies.
     */
     Route::middleware('can:isP4')->prefix('p4')->name('p4.')->group(function () {
 
-        // Viaturas do P4 (apenas da OPM do usuário)
         Route::resource('viaturas', P4ViaturaController::class)
             ->only(['index', 'show', 'edit', 'update']);
 
-        // Manutenções do P4 (apenas as vinculadas a veículos da OPM do usuário)
         Route::resource('manutencoes', P4ManutencaoController::class)
             ->only(['index', 'show', 'edit', 'update']);
 
-        // Rádios do P4 (apenas da OPM do usuário)
         Route::resource('radios', P4RadioController::class)
             ->only(['index', 'show', 'edit', 'update']);
 
-        // Relatórios do P4 (escopo OPM)
         Route::get('/relatorios', [RelatorioController::class, 'porOpm'])->name('relatorios.index');
         Route::get('/relatorios/viaturas', [RelatorioController::class, 'viaturasP4'])->name('relatorios.viaturas');
     });
@@ -193,23 +250,18 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     | Rotas SISGP (auth + can:consultarSisgp)
     |--------------------------------------------------------------------------
-    | Disponíveis para quem tem a permissão consultarSisgp (ex.: Admin e P4).
     */
     Route::prefix('sisgp')->name('sisgp.')->middleware('can:consultarSisgp')->group(function () {
-        // Formulário/resultado de consulta de unidade
         Route::get('/unidades/consulta', [SisgpController::class, 'unidadeConsulta'])
             ->name('unidades.consulta');
 
-        // Debug genérico (GET/POST)
         Route::get('/_debug', [SisgpController::class, 'debug'])
             ->name('debug');
 
-        // Matriz de tentativas (paths x métodos)
         Route::get('/_debug-matrix', [SisgpController::class, 'debugMatrix'])
             ->name('debug.matrix');
 
-        // Fuzzer de payload para POST /unidade
-        Route::get('/_debug-fuzz-unidade', [SisgpController::class, 'debugFuzzUnidade'])
+        Route::get('/_debug-fuzz_unidade', [SisgpController::class, 'debugFuzzUnidade'])
             ->name('debug.fuzz_unidade');
     });
 });

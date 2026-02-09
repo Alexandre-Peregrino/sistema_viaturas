@@ -1,3 +1,35 @@
+# Laravel
+.env
+.env.*
+/storage/*.key
+/storage/app/**
+/storage/framework/**
+/storage/logs/**
+/bootstrap/cache/**
+
+# Dumps / imports / exports
+*.dump
+*.sql
+*.csv
+/data/
+/reports/
+/sync/
+/tmp_auditoria/
+/tools/
+
+# Arquivos temporários / auditoria
+*schema*.txt
+*columns*.txt
+em_opm_com_match
+veiculos_columns.txt
+veiculos_schema.txt
+
+# Migrations placeholders (não versionar)
+database/migrations/XXXX_*.php
+database/migrations/xxxx_*.php
+
+# Node (opcional)
+node_modules/
 *.log
 .DS_Store
 .env
