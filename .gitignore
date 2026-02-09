@@ -61,3 +61,6 @@ yarn-error.log
 composer.lock
 project_context_for_AI
 
+
+# Contexto local
+project_context_for_AI.txt
