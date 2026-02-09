@@ -19,43 +19,154 @@
         @method('PUT')
 
         <div class="row g-4">
-            {{-- Coluna: dados do usuário (somente leitura) --}}
+            {{-- Coluna: dados do usuário (agora editável) --}}
             <div class="col-lg-7">
                 <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">
-                        Dados do Usuário (informativos)
+                        Dados do Usuário (editável - banco local)
                     </div>
+
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Nome:</label>
-                            <input type="text" class="form-control" value="{{ $usuario->nome }}" disabled>
+                            <label for="nome" class="form-label">Nome:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="nome"
+                                name="nome"
+                                value="{{ old('nome', $usuario->nome) }}"
+                                maxlength="255"
+                                required
+                            >
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Nome de Guerra:</label>
-                            <input type="text" class="form-control" value="{{ $usuario->nome_guerra ?? '—' }}" disabled>
+                            <label for="nome_guerra" class="form-label">Nome de Guerra:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="nome_guerra"
+                                name="nome_guerra"
+                                value="{{ old('nome_guerra', $usuario->nome_guerra) }}"
+                                maxlength="120"
+                                placeholder="Ex.: PEREGRINO"
+                            >
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Matrícula:</label>
-                            <input type="text" class="form-control" value="{{ $usuario->matricula ?? '—' }}" disabled>
+                            <label for="matricula" class="form-label">Matrícula:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="matricula"
+                                name="matricula"
+                                value="{{ old('matricula', $usuario->matricula) }}"
+                                maxlength="50"
+                                placeholder="Ex.: 123456"
+                            >
+                            <div class="form-text">
+                                Se quiser manter imutável, mude para <code>readonly</code>.
+                            </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Título/Graduação:</label>
-                            <input type="text" class="form-control" value="{{ $usuario->titulo ?? '—' }}" disabled>
+                            <label for="titulo" class="form-label">Título/Graduação:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="titulo"
+                                name="titulo"
+                                value="{{ old('titulo', $usuario->titulo) }}"
+                                maxlength="80"
+                                placeholder="Ex.: SD / CB / SGT / TEN"
+                            >
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">CPF:</label>
-                            <input type="text" class="form-control" value="{{ $usuario->cpf }}" disabled>
+                            <label for="posto_graduacao" class="form-label">Posto/Graduação (campo novo):</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="posto_graduacao"
+                                name="posto_graduacao"
+                                value="{{ old('posto_graduacao', $usuario->posto_graduacao) }}"
+                                maxlength="80"
+                                placeholder="Ex.: 3º SGT"
+                            >
                         </div>
 
-                        <div class="mt-2">
+                        <div class="mb-3">
+                            <label for="numero_praca" class="form-label">Número de Praça:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="numero_praca"
+                                name="numero_praca"
+                                value="{{ old('numero_praca', $usuario->numero_praca) }}"
+                                maxlength="30"
+                                placeholder="Ex.: 123.456"
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="rg_militar" class="form-label">RG Militar:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="rg_militar"
+                                name="rg_militar"
+                                value="{{ old('rg_militar', $usuario->rg_militar) }}"
+                                maxlength="50"
+                                placeholder="Ex.: 0000000"
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefone" class="form-label">Telefone:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="telefone"
+                                name="telefone"
+                                value="{{ old('telefone', $usuario->telefone) }}"
+                                maxlength="30"
+                                placeholder="(84) 9xxxx-xxxx"
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cpf" class="form-label">CPF:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="cpf"
+                                name="cpf"
+                                value="{{ old('cpf', $usuario->cpf) }}"
+                                maxlength="14"
+                                readonly
+                            >
+                            <div class="form-text">
+                                CPF está <strong>somente leitura</strong> por padrão (recomendado).
+                                Se você realmente quiser editar, troque <code>readonly</code> por nada e trate no controller.
+                            </div>
+                        </div>
+
+                        <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
                             <span class="badge {{ $usuario->permitido ? 'bg-success' : 'bg-danger' }}">
                                 {{ $usuario->permitido ? 'Acesso permitido' : 'Acesso bloqueado' }}
                             </span>
+
+                            <span class="badge bg-info text-dark">
+                                Cadastro: {{ $usuario->cadastro_completo ? 'completo' : 'incompleto' }}
+                            </span>
+
+                            @if(!empty($usuario->solicitacao_status))
+                                <span class="badge bg-warning text-dark">
+                                    Solicitação: {{ $usuario->solicitacao_status }}
+                                </span>
+                            @endif
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -66,6 +177,7 @@
                     <div class="card-header bg-secondary text-white">
                         Permissões Locais
                     </div>
+
                     <div class="card-body">
                         <div class="mb-3">
                             <label for="perfil" class="form-label">Perfil:</label>
@@ -91,7 +203,6 @@
                             </select>
                         </div>
 
-                        {{-- NOVO: e-mail editável --}}
                         <div class="mb-3">
                             <label for="email" class="form-label">E-mail:</label>
                             <input
@@ -116,6 +227,27 @@
                                 <option value="0" {{ !old('permitido', $usuario->permitido) ? 'selected' : '' }}>Bloquear</option>
                             </select>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="cadastro_completo" class="form-label">Cadastro Completo:</label>
+                            <select name="cadastro_completo" id="cadastro_completo" class="form-select">
+                                <option value="1" {{ old('cadastro_completo', $usuario->cadastro_completo) ? 'selected' : '' }}>Sim</option>
+                                <option value="0" {{ !old('cadastro_completo', $usuario->cadastro_completo) ? 'selected' : '' }}>Não</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="solicitacao_status" class="form-label">Status da Solicitação:</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                id="solicitacao_status"
+                                name="solicitacao_status"
+                                value="{{ old('solicitacao_status', $usuario->solicitacao_status) }}"
+                                maxlength="50"
+                                placeholder="Ex.: pendente / aprovada / negada"
+                            >
+                        </div>
                     </div>
 
                     <div class="card-footer d-flex justify-content-between">
@@ -130,8 +262,7 @@
 
                 <div class="alert alert-info mt-3 mb-0">
                     <i class="bi bi-info-circle-fill"></i>
-                    <strong>Perfil</strong>, <strong>OPM</strong> e <strong>E-mail</strong> são editáveis pelo administrador.
-                    Os demais dados são informativos e podem ser atualizados em logins futuros ou manualmente pelo admin.
+                    <strong>Admin/Super Admin</strong> pode editar os dados do usuário e as permissões locais.
                 </div>
             </div>
         </div>

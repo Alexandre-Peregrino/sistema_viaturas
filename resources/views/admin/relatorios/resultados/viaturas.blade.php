@@ -1,73 +1,164 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container">
-    <h2 class="mb-4">{{ $titulo ?? 'Relatório de Viaturas' }}</h2>
+<div class="container mt-4">
 
-    @if($viaturas->isEmpty())
-        <div class="alert alert-warning">
-            Nenhuma viatura encontrada com os filtros selecionados.
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>
+            <h2 class="text-primary mb-1">{{ $titulo ?? 'Relatório de Viaturas' }}</h2>
+            <div class="text-muted small">
+                Total nesta página: {{ $viaturas->count() }} | Total geral: {{ $viaturas->total() }}
+            </div>
         </div>
-    @else
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Placa</th>
-                        <th>Modelo</th>
-                        <th>Tipo</th>
-                        <th>Combustível</th>
-                        <th>Tração</th>
-                        <th>OPM (Cadastro)</th>
-                        @if(!empty($usarLotacao) && $usarLotacao)
-                            <th>OPM (Lotação Atual)</th>
-                            <th>Município (Lotação)</th>
-                            @if(!empty($mostrarTempo) && $mostrarTempo)
-                                <th>Desde</th>
-                                <th>Há quanto tempo</th>
-                            @endif
-                        @endif
-                        <th>Status</th>
-                        <th>Qtd Manutenções</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($viaturas as $v)
-                        @php
-                            $lotacao = optional($v->lotacoes)->first(); // carregada com whereNull(data_saida)
-                            $desde = $lotacao?->data_entrada ? \Carbon\Carbon::parse($lotacao->data_entrada) : null;
-                        @endphp
-                        <tr>
-                            <td>{{ $v->placa }}</td>
-                            <td>{{ $v->marca_modelo ?? 'Não informado' }}</td>
-                            <td>{{ $v->tipo_veiculo ?? 'Não informado' }}</td>
-                            <td>{{ $v->combustivel ?? 'Não informado' }}</td>
-                            <td>{{ $v->tracao ?? 'Não informado' }}</td>
-                            <td>{{ $v->opm->sigla ?? 'Não informado' }}</td>
 
-                            @if(!empty($usarLotacao) && $usarLotacao)
-                                <td>{{ $lotacao?->opm?->sigla ?? '—' }}</td>
-                                <td>{{ $lotacao?->municipio?->nome ?? '—' }}</td>
-                                @if(!empty($mostrarTempo) && $mostrarTempo)
-                                    <td>{{ $desde ? $desde->format('d/m/Y') : '—' }}</td>
-                                    <td>{{ $desde ? $desde->diffForHumans(now(), true) : '—' }}</td>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('admin.relatorios.viaturas.filtros') }}" class="btn btn-outline-primary">
+                Ajustar filtros
+            </a>
+            <a href="{{ route('admin.relatorios.geral') }}" class="btn btn-outline-secondary">
+                Voltar
+            </a>
+        </div>
+    </div>
+
+    {{-- Resumo de filtros aplicados --}}
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge text-bg-secondary">
+                    Escopo: {{ !empty($usarLotacao) ? 'Lotação atual' : 'Cadastro' }}
+                </span>
+
+                @if(request('opm_id'))
+                    <span class="badge text-bg-secondary">OPM: {{ request('opm_id') }}</span>
+                @else
+                    <span class="badge text-bg-light text-dark border">OPM: Todas</span>
+                @endif
+
+                @php
+                    $tipos = (array) request('tipos', []);
+                    $comb = (array) request('combustiveis', []);
+                    $trac = (array) request('tracoes', []);
+                @endphp
+
+                @if(count($tipos))
+                    <span class="badge text-bg-light text-dark border">Tipos: {{ implode(', ', $tipos) }}</span>
+                @endif
+
+                @if(count($comb))
+                    <span class="badge text-bg-light text-dark border">Combustíveis: {{ implode(', ', $comb) }}</span>
+                @endif
+
+                @if(count($trac))
+                    <span class="badge text-bg-light text-dark border">Trações: {{ implode(', ', $trac) }}</span>
+                @endif
+
+                @if(!empty($mostrarTempo))
+                    <span class="badge text-bg-info">Tempo: ativado</span>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    {{-- Tabela --}}
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            @if($viaturas->isEmpty())
+                <div class="p-4">
+                    <div class="alert alert-warning mb-0">
+                        Nenhuma viatura encontrada com os filtros atuais.
+                    </div>
+                </div>
+            @else
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Prefixo</th>
+                                <th>Placa</th>
+                                <th>Marca/Modelo</th>
+                                <th>Tipo</th>
+                                <th>Combustível</th>
+                                <th>Tração</th>
+                                <th>Status</th>
+                                <th>OPM</th>
+                                @if(!empty($usarLotacao) && !empty($mostrarTempo))
+                                    <th>Desde</th>
+                                    <th>Há quanto tempo</th>
                                 @endif
-                            @endif
+                                <th class="text-center">Manut.</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($viaturas as $v)
+                                @php
+                                    // Quando usar lotação: controller carrega lotacoes atuais (data_saida null)
+                                    $lotacaoAtual = (!empty($usarLotacao) && isset($v->lotacoes)) ? $v->lotacoes->first() : null;
 
-                            <td>{{ ucfirst($v->status) }}</td>
-                            <td>{{ $v->manutencoes_count ?? $v->manutencoes->count() }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                                    $opmSigla = null;
+                                    if (!empty($usarLotacao) && $lotacaoAtual && $lotacaoAtual->opm) {
+                                        $opmSigla = $lotacaoAtual->opm->sigla ?? null;
+                                    } elseif ($v->opm) {
+                                        $opmSigla = $v->opm->sigla ?? null;
+                                    }
+
+                                    // Tentativa de data de entrada (ajuste o nome do campo se for diferente)
+                                    $desde = null;
+                                    if ($lotacaoAtual) {
+                                        $desde = $lotacaoAtual->data_entrada ?? $lotacaoAtual->created_at ?? null;
+                                    }
+                                @endphp
+
+                                <tr>
+                                    <td>{{ $v->prefixo ?? '—' }}</td>
+                                    <td class="fw-semibold">{{ $v->placa ?? '—' }}</td>
+                                    <td>{{ $v->marca_modelo ?? ($v->marca ?? '').' '.($v->modelo ?? '') }}</td>
+                                    <td>{{ $v->tipo_veiculo ?? '—' }}</td>
+                                    <td>{{ $v->combustivel ?? '—' }}</td>
+                                    <td>{{ $v->tracao ?? '—' }}</td>
+                                    <td>{{ $v->status ?? '—' }}</td>
+                                    <td>{{ $opmSigla ?? '—' }}</td>
+
+                                    @if(!empty($usarLotacao) && !empty($mostrarTempo))
+                                        <td>
+                                            @if($desde)
+                                                {{ \Carbon\Carbon::parse($desde)->format('d/m/Y') }}
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($desde)
+                                                {{ \Carbon\Carbon::parse($desde)->diffForHumans() }}
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                    @endif
+
+                                    <td class="text-center">
+                                        <span class="badge text-bg-secondary">
+                                            {{ $v->manutencoes_count ?? 0 }}
+                                        </span>
+                                    </td>
+
+                                    <td class="text-end">
+                                        <a href="{{ route('admin.viaturas.edit', $v->id) }}" class="btn btn-sm btn-outline-primary">
+                                            Editar
+                                        </a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="p-3">
+                    {{ $viaturas->links() }}
+                </div>
+            @endif
         </div>
-
-        {{-- paginação (se vier paginado) --}}
-        @if(method_exists($viaturas, 'links'))
-            {{ $viaturas->links() }}
-        @endif
-    @endif
-
-    <a href="{{ route('admin.relatorios.viaturas.filtros') }}" class="btn btn-primary mt-3">Voltar aos Filtros</a>
+    </div>
 </div>
 @endsection
