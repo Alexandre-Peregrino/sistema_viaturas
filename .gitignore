@@ -1,13 +1,28 @@
-# Laravel
+# Ambiente / segredos
 .env
 .env.*
-/storage/*.key
-/storage/app/**
-/storage/framework/**
-/storage/logs/**
-/bootstrap/cache/**
+.env.backup
+.env.production
+/auth.json
 
-# Dumps / imports / exports
+# Laravel
+/vendor/
+/bootstrap/cache/
+/storage/*.key
+/storage/app/
+/storage/framework/
+/storage/logs/
+/public/storage
+/public/hot
+/public/build
+
+# Node
+/node_modules/
+npm-debug.log
+yarn-error.log
+*.log
+
+# Dumps / imports / exports / dados locais
 *.dump
 *.sql
 *.csv
@@ -17,50 +32,30 @@
 /tmp_auditoria/
 /tools/
 
-# Arquivos temporários / auditoria
+# Auditoria / temporários
 *schema*.txt
 *columns*.txt
-em_opm_com_match
 veiculos_columns.txt
 veiculos_schema.txt
+em_opm_com_match
 
 # Migrations placeholders (não versionar)
 database/migrations/XXXX_*.php
 database/migrations/xxxx_*.php
 
-# Node (opcional)
-node_modules/
-*.log
+# IDEs / SO
 .DS_Store
-.env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
+Thumbs.db
 /.fleet
 /.idea
 /.nova
-/.phpunit.cache
 /.vscode
 /.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
-npm-debug.log
-Thumbs.db
-yarn-error.log
-/.phpunit.result.cache
-.phpunit.result.cache
-composer.lock
-project_context_for_AI
 
+# Test / cache
+.phpunit.result.cache
+/.phpunit.cache
+.phpactor.json
 
 # Contexto local
 project_context_for_AI.txt
