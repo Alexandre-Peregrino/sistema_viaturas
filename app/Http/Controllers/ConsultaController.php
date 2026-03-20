@@ -6,6 +6,7 @@ use App\Models\Opm;
 use App\Models\Veiculo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConsultaController extends Controller
@@ -41,6 +42,48 @@ class ConsultaController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Se há filtros “reais” para executar a consulta.
+     * - Aceita paginação (page) como continuação de uma consulta já iniciada.
+     * - Ignora group/per_page/format (não devem disparar consulta).
+     */
+    private function hasAnyRealFilter(Request $request, array $filters): bool
+    {
+        // Paginação conta (navegação de resultados)
+        if ($request->filled('page')) return true;
+
+        // Busca rápida
+        if (!empty($filters['q'])) return true;
+
+        // Arrays de filtros
+        $arrayKeys = [
+            'opm_ids',
+            'cprs',
+            'opm_cidades',
+            'viatura_cidades',
+            'areas',
+            'anos_fab',
+            'anos_mod',
+            'marcas',
+            'modelos',
+            'tracoes',
+            'combustiveis',
+            'tipos',
+            'status',
+        ];
+
+        foreach ($arrayKeys as $k) {
+            if (!empty($filters[$k]) && is_array($filters[$k])) {
+                return true;
+            }
+        }
+
+        // Ativo: '' não conta
+        if (($filters['ativo'] ?? '') !== '') return true;
+
+        return false;
     }
 
     /**
@@ -121,6 +164,14 @@ class ConsultaController extends Controller
                 });
             });
 
+        // 🔒 Sigilo: veículos sigilosos só para admin
+        if (!$this->isAdmin()) {
+            $query->where(function ($q) {
+                $q->whereNull('nivel_sigilo')
+                    ->orWhere('nivel_sigilo', '<>', 'sigiloso');
+            });
+        }
+
         // P4 restrito à própria OPM
         if ($this->isP4() && !$this->isAdmin()) {
             $userOpmId = $this->userOpmId();
@@ -142,14 +193,61 @@ class ConsultaController extends Controller
         $filters = $this->readFilters($request);
 
         // Permite "" (sem agrupamento) se você quiser
-        $group = (string) $request->query('group', 'opm');
+        $group = (string) $request->query('group', '');
 
         $groupAllowed = ['', 'opm', 'cpr', 'opm_cidade', 'viatura_cidade', 'area', 'ano_fab', 'ano_mod', 'marca', 'tracao'];
-        if (!in_array($group, $groupAllowed, true)) $group = 'opm';
+        if (!in_array($group, $groupAllowed, true)) $group = '';
 
         $perPage = (int) $request->query('per_page', 20);
         $perPage = ($perPage >= 10 && $perPage <= 200) ? $perPage : 20;
 
+        // ✅ total geral (para mostrar contador mesmo sem consulta)
+        // 🔒 aplica sigilo para não-admin, para não “vazar” contagem
+        $totalGeralQuery = Veiculo::query();
+        if (!$this->isAdmin()) {
+            $totalGeralQuery->where(function ($q) {
+                $q->whereNull('nivel_sigilo')
+                    ->orWhere('nivel_sigilo', '<>', 'sigiloso');
+            });
+        }
+        $totalGeral = $totalGeralQuery->count();
+
+        // ✅ não lista tudo por padrão
+        $executouConsulta = $this->hasAnyRealFilter($request, $filters);
+
+        $options = $this->filterOptionsForViaturas();
+        $activeChips = $this->makeActiveChips($filters);
+
+        $selectedOpms = [];
+        if (!empty($filters['opm_ids'])) {
+            $selectedOpms = Opm::query()
+                ->whereIn('id', array_map('intval', $filters['opm_ids']))
+                ->orderBy('sigla')
+                ->get(['id', 'sigla']);
+        }
+
+        // Se não executou consulta: devolve paginator vazio + sem summary
+        if (!$executouConsulta) {
+            $empty = new LengthAwarePaginator([], 0, $perPage, 1, [
+                'path'  => $request->url(),
+                'query' => $request->query(),
+            ]);
+
+            return view('consultas.viaturas.index', [
+                'filters'      => $filters,
+                'group'        => $group,
+                'perPage'      => $perPage,
+                'viaturas'     => $empty,
+                'summary'      => null,
+                'options'      => $options,
+                'activeChips'  => $activeChips,
+                'selectedOpms' => $selectedOpms,
+                'executouConsulta' => false,
+                'totalGeral' => $totalGeral,
+            ]);
+        }
+
+        // ✅ Só aqui executa query/paginação
         $base = $this->buildBaseQuery($filters);
 
         $viaturas = (clone $base)
@@ -162,17 +260,17 @@ class ConsultaController extends Controller
             $summary = $this->groupSummary(clone $base, $group);
         }
 
-        $options = $this->filterOptionsForViaturas();
-        $activeChips = $this->makeActiveChips($filters);
-
         return view('consultas.viaturas.index', [
-            'filters'     => $filters,
-            'group'       => $group,
-            'perPage'     => $perPage,
-            'viaturas'    => $viaturas,
-            'summary'     => $summary,
-            'options'     => $options,
-            'activeChips' => $activeChips,
+            'filters'      => $filters,
+            'group'        => $group,
+            'perPage'      => $perPage,
+            'viaturas'     => $viaturas,
+            'summary'      => $summary,
+            'options'      => $options,
+            'activeChips'  => $activeChips,
+            'selectedOpms' => $selectedOpms,
+            'executouConsulta' => true,
+            'totalGeral' => $totalGeral,
         ]);
     }
 
@@ -182,6 +280,11 @@ class ConsultaController extends Controller
     private function viaturasCsv(Request $request): StreamedResponse
     {
         $filters = $this->readFilters($request);
+
+        // ✅ Evita exportar "tudo" sem filtros
+        if (!$this->hasAnyRealFilter($request, $filters)) {
+            abort(422, 'Selecione ao menos um filtro antes de exportar CSV.');
+        }
 
         $base = $this->buildBaseQuery($filters)
             ->orderBy('prefixo');
@@ -303,34 +406,42 @@ class ConsultaController extends Controller
                 'ano_fabricacao', 'ano_modelo',
                 'cidade', 'area',
                 'opm_id',
-            ])
+            ]);
 
-            // Busca rápida (placa/prefixo/marca/modelo/tração/comb/… + OPM)
-            ->when($filters['q'] !== '', function ($qb) use ($filters) {
-                $q = trim((string) $filters['q']);
+        // 🔒 Sigilo: veículos sigilosos só para admin
+        if (!$this->isAdmin()) {
+            $base->where(function ($q) {
+                $q->whereNull('nivel_sigilo')
+                    ->orWhere('nivel_sigilo', '<>', 'sigiloso');
+            });
+        }
 
-                $qb->where(function ($w) use ($q) {
-                    $w->where('placa', 'ILIKE', "%{$q}%")
-                        ->orWhere('prefixo', 'ILIKE', "%{$q}%")
-                        ->orWhere('marca_modelo', 'ILIKE', "%{$q}%")
-                        ->orWhere('marca', 'ILIKE', "%{$q}%")
-                        ->orWhere('modelo', 'ILIKE', "%{$q}%")
-                        ->orWhere('tipo_veiculo', 'ILIKE', "%{$q}%")
-                        ->orWhere('combustivel', 'ILIKE', "%{$q}%")
-                        ->orWhere('tracao', 'ILIKE', "%{$q}%")
-                        ->orWhere('cidade', 'ILIKE', "%{$q}%")
-                        ->orWhere('area', 'ILIKE', "%{$q}%")
-                        ->orWhere('chassi', 'ILIKE', "%{$q}%")
-                        ->orWhere('renavam', 'ILIKE', "%{$q}%")
-                        ->orWhere('numero_serie_radio', 'ILIKE', "%{$q}%");
-                });
+        // Busca rápida (placa/prefixo/marca/modelo/tração/comb/… + OPM)
+        $base->when($filters['q'] !== '', function ($qb) use ($filters) {
+            $q = trim((string) $filters['q']);
 
-                // Busca também na OPM (sigla/nome)
-                $qb->orWhereHas('opm', function ($opmQ) use ($q) {
-                    $opmQ->where('sigla', 'ILIKE', "%{$q}%")
-                        ->orWhere('nome', 'ILIKE', "%{$q}%");
-                });
-            })
+            $qb->where(function ($w) use ($q) {
+                $w->where('placa', 'ILIKE', "%{$q}%")
+                    ->orWhere('prefixo', 'ILIKE', "%{$q}%")
+                    ->orWhere('marca_modelo', 'ILIKE', "%{$q}%")
+                    ->orWhere('marca', 'ILIKE', "%{$q}%")
+                    ->orWhere('modelo', 'ILIKE', "%{$q}%")
+                    ->orWhere('tipo_veiculo', 'ILIKE', "%{$q}%")
+                    ->orWhere('combustivel', 'ILIKE', "%{$q}%")
+                    ->orWhere('tracao', 'ILIKE', "%{$q}%")
+                    ->orWhere('cidade', 'ILIKE', "%{$q}%")
+                    ->orWhere('area', 'ILIKE', "%{$q}%")
+                    ->orWhere('chassi', 'ILIKE', "%{$q}%")
+                    ->orWhere('renavam', 'ILIKE', "%{$q}%")
+                    ->orWhere('numero_serie_radio', 'ILIKE', "%{$q}%");
+            });
+
+            // Busca também na OPM (sigla/nome)
+            $qb->orWhereHas('opm', function ($opmQ) use ($q) {
+                $opmQ->where('sigla', 'ILIKE', "%{$q}%")
+                    ->orWhere('nome', 'ILIKE', "%{$q}%");
+            });
+        })
 
             // OPM
             ->when(!empty($filters['opm_ids']), fn($qb) => $qb->whereIn('opm_id', array_map('intval', $filters['opm_ids'])))
@@ -432,7 +543,6 @@ class ConsultaController extends Controller
                     ->limit(200)
                     ->get();
                 break;
-
 
             case 'cpr':
                 $label = 'Por CPR';
@@ -581,14 +691,25 @@ class ConsultaController extends Controller
      */
     private function filterOptionsForViaturas(): array
     {
-        $opmIdsQuery = Veiculo::query()->select('opm_id')->distinct();
+        // Base para opções/contagens: deve respeitar sigilo e regra do P4
+        $baseVeiculos = Veiculo::query();
 
-        if ($this->isP4() && !$this->isAdmin()) {
-            $userOpmId = $this->userOpmId();
-            if ($userOpmId) $opmIdsQuery->where('opm_id', $userOpmId);
+        // 🔒 Sigilo: veículos sigilosos só para admin
+        if (!$this->isAdmin()) {
+            $baseVeiculos->where(function ($q) {
+                $q->whereNull('nivel_sigilo')
+                    ->orWhere('nivel_sigilo', '<>', 'sigiloso');
+            });
         }
 
-        $opmIdsInUse = $opmIdsQuery->pluck('opm_id')->map(fn($x) => (int) $x)->all();
+        // P4 restrito à própria OPM
+        if ($this->isP4() && !$this->isAdmin()) {
+            $userOpmId = $this->userOpmId();
+            if ($userOpmId) $baseVeiculos->where('opm_id', $userOpmId);
+        }
+
+        $opmIdsInUse = (clone $baseVeiculos)->select('opm_id')->distinct()
+            ->pluck('opm_id')->map(fn($x) => (int) $x)->all();
 
         $opms = Opm::query()
             ->whereIn('id', $opmIdsInUse)
@@ -605,8 +726,8 @@ class ConsultaController extends Controller
             ->whereNotNull('cidade')->where('cidade', '<>', '')
             ->distinct()->orderBy('cidade')->pluck('cidade');
 
-        $listTextWithCount = function (string $col, int $limit = 200) {
-            return Veiculo::query()
+        $listTextWithCount = function (string $col, int $limit = 200) use ($baseVeiculos) {
+            return (clone $baseVeiculos)
                 ->whereNotNull($col)
                 ->where($col, '<>', '')
                 ->selectRaw("{$col} as value, COUNT(*) as total")
@@ -616,8 +737,8 @@ class ConsultaController extends Controller
                 ->get();
         };
 
-        $listNumberWithCount = function (string $col, int $limit = 200) {
-            return Veiculo::query()
+        $listNumberWithCount = function (string $col, int $limit = 200) use ($baseVeiculos) {
+            return (clone $baseVeiculos)
                 ->whereNotNull($col)
                 ->selectRaw("{$col} as value, COUNT(*) as total")
                 ->groupBy($col)

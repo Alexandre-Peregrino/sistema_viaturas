@@ -10,8 +10,9 @@ class Manutencao extends Model
     use HasFactory;
 
     /**
-     * Nome da tabela (caso não seja o plural padrão do Laravel).
-     * Se sua tabela já se chama "manutencoes", pode manter por clareza.
+     * Nome da tabela.
+     * OBS: o plural "manutencaos" é o padrão que o Laravel gera para "Manutencao".
+     * Se você renomear a tabela para "manutencoes" no futuro, ajuste aqui.
      */
     protected $table = 'manutencaos';
 
@@ -31,8 +32,6 @@ class Manutencao extends Model
 
     /**
      * Conversões de tipo.
-     * - datas como Carbon
-     * - valor com 2 casas decimais
      */
     protected $casts = [
         'data_inicio' => 'datetime',
@@ -41,49 +40,45 @@ class Manutencao extends Model
     ];
 
     /**
-     * Relações
-     */
-
-    // Manutenção pertence a um veículo (FK: veiculo_id)
-    public function veiculo()
-    {
-        return $this->belongsTo(Veiculo::class, 'veiculo_id');
-    }
-
-    // (Opcional futuro) Se existir tabela/oficina como model, você pode ligar aqui:
-    // public function oficinaRef()
-    // {
-    //     return $this->belongsTo(Oficina::class, 'oficina_id');
-    // }
-
-    /**
-     * Constantes de domínio
+     * Constantes de domínio.
      */
     public const STATUSES = ['aberta', 'concluida', 'pendente'];
     public const TYPES    = ['preventiva', 'corretiva'];
 
     /**
-     * Acessores/Mutators simples
-     * - Armazene o status/tipo em minúsculas; exiba capitalizado.
+     * Relações
      */
-    public function getStatusAttribute($value): ?string
+    public function veiculo()
     {
-        return $value !== null ? ucfirst($value) : null;
+        return $this->belongsTo(Veiculo::class, 'veiculo_id');
     }
 
+    /**
+     * Mutators: sempre salva em minúsculo no banco (consistência).
+     */
     public function setStatusAttribute($value): void
     {
-        $this->attributes['status'] = is_string($value) ? mb_strtolower($value) : $value;
-    }
-
-    public function getTipoAttribute($value): ?string
-    {
-        return $value !== null ? ucfirst($value) : null;
+        $this->attributes['status'] = is_string($value) ? mb_strtolower(trim($value)) : $value;
     }
 
     public function setTipoAttribute($value): void
     {
-        $this->attributes['tipo'] = is_string($value) ? mb_strtolower($value) : $value;
+        $this->attributes['tipo'] = is_string($value) ? mb_strtolower(trim($value)) : $value;
+    }
+
+    /**
+     * Labels para exibição (não afetam o valor "real" do atributo).
+     */
+    public function getStatusLabelAttribute(): ?string
+    {
+        $raw = $this->getRawOriginal('status');
+        return $raw !== null ? ucfirst($raw) : null;
+    }
+
+    public function getTipoLabelAttribute(): ?string
+    {
+        $raw = $this->getRawOriginal('tipo');
+        return $raw !== null ? ucfirst($raw) : null;
     }
 
     /**
@@ -97,44 +92,44 @@ class Manutencao extends Model
     public function scopeStatus($q, ?string $status)
     {
         if (!$status) return $q;
-        return $q->where('status', mb_strtolower($status));
+        return $q->where('status', mb_strtolower(trim($status)));
     }
 
     public function scopeTipo($q, ?string $tipo)
     {
         if (!$tipo) return $q;
-        return $q->where('tipo', mb_strtolower($tipo));
+        return $q->where('tipo', mb_strtolower(trim($tipo)));
     }
 
     /**
-     * Helpers de leitura
+     * Helpers de leitura (sempre pelo valor cru do banco).
      */
     public function isAberta(): bool
     {
-        return mb_strtolower($this->getRawOriginal('status')) === 'aberta';
+        return mb_strtolower((string) $this->getRawOriginal('status')) === 'aberta';
     }
 
     public function isConcluida(): bool
     {
-        return mb_strtolower($this->getRawOriginal('status')) === 'concluida';
+        return mb_strtolower((string) $this->getRawOriginal('status')) === 'concluida';
     }
 
     public function isPendente(): bool
     {
-        return mb_strtolower($this->getRawOriginal('status')) === 'pendente';
+        return mb_strtolower((string) $this->getRawOriginal('status')) === 'pendente';
     }
 
     /**
-     * Hooks (se precisar lógica antes de criar/atualizar)
+     * Hooks (opcional)
      */
     protected static function booted()
     {
         static::creating(function (Manutencao $m) {
-            // ex.: normalizar campos, logs, etc.
+            // normalizações, logs, etc.
         });
 
         static::updating(function (Manutencao $m) {
-            // ex.: normalizar campos, logs, etc.
+            // normalizações, logs, etc.
         });
     }
 }

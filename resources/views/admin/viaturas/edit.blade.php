@@ -46,7 +46,8 @@
         </div>
     @endif
 
-    <div class="card shadow-sm">
+    {{-- CARD: Dados do cadastro --}}
+    <div class="card shadow-sm mb-3">
         <div class="card-header bg-white d-flex align-items-center justify-content-between">
             <div class="fw-semibold">
                 <i class="bi bi-card-checklist me-2"></i> Dados do cadastro
@@ -82,6 +83,35 @@
                 </div>
 
             </form>
+        </div>
+    </div>
+
+    {{-- CARD: Histórico de movimentações --}}
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex align-items-center justify-content-between">
+            <div class="fw-semibold">
+                <i class="bi bi-clock-history me-2"></i> Histórico de movimentações
+            </div>
+
+            <button class="btn btn-outline-primary btn-sm"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#movimentacoesCollapse"
+                    aria-expanded="false"
+                    aria-controls="movimentacoesCollapse">
+                <i class="bi bi-eye"></i> Ver/ocultar
+            </button>
+        </div>
+
+        <div class="collapse" id="movimentacoesCollapse">
+            <div class="card-body">
+                <div class="text-muted small mb-3">
+                    Este histórico é gerado a partir da tabela <code>veiculo_lotacoes</code>.
+                    A lotação atual é a linha sem <code>data_saida</code>.
+                </div>
+
+                @include('admin.viaturas._movimentacoes', ['veiculo' => $veiculo])
+            </div>
         </div>
     </div>
 

@@ -41,9 +41,9 @@ class Opm extends Model
         return $this->hasMany(Usuario::class);
     }
 
-    public function municipio()
+    public function municipios()
     {
-        return $this->belongsTo(Municipio::class);
+        return $this->belongsToMany(\App\Models\Municipio::class, 'opm_municipios', 'opm_id', 'municipio_id');
     }
 
     public function parent()

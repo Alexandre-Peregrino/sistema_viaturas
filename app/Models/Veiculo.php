@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Veiculo extends Model
 {
@@ -40,12 +42,8 @@ class Veiculo extends Model
         'dt_final_garantia',
         'garantia_bateria_meses',
 
-
-        // planilha / cadastro
         'proprietario',
         'contrato',
-
-        // ✅ NOVO: Nº Processo SEI
         'processo_sei',
 
         'classe_igpn',
@@ -55,22 +53,23 @@ class Veiculo extends Model
         'modelo',
         'municipio_id',
 
-        // se esses campos existirem na tabela e você usa na blade:
         'n_serie_bateria',
         'dt_inicial_garantia',
     ];
 
     protected $casts = [
-        'aquisicao_dados'      => 'date',
-        'entrega_dados_opm'    => 'date',
-        'ativo'                => 'boolean',
-        'em_processo_descarga' => 'boolean',
-        'dt_inicial_garantia'  => 'date',
-        'dt_final_garantia'   => 'date',
-        'garantia_bateria_meses' => 'integer',
-
+        'aquisicao_dados'         => 'date',
+        'entrega_dados_opm'       => 'date',
+        'ativo'                   => 'boolean',
+        'em_processo_descarga'    => 'boolean',
+        'dt_inicial_garantia'     => 'date',
+        'dt_final_garantia'       => 'date',
+        'garantia_bateria_meses'  => 'integer',
     ];
 
+    /**
+     * ⚠️ Legado/espelho: não use para regras de negócio (OPM oficial vem de lotacaoAtual)
+     */
     public function opm()
     {
         return $this->belongsTo(Opm::class);
@@ -91,9 +90,18 @@ class Veiculo extends Model
         return $this->belongsTo(Municipio::class);
     }
 
-    public function lotacoes()
+    /** ✅ Histórico oficial */
+    public function lotacoes(): HasMany
     {
-        return $this->hasMany(VeiculoLotacao::class);
+        return $this->hasMany(VeiculoLotacao::class, 'veiculo_id');
+    }
+
+    /** ✅ Lotação atual (fonte da verdade da OPM atual) */
+    public function lotacaoAtual(): HasOne
+    {
+        return $this->hasOne(VeiculoLotacao::class, 'veiculo_id')
+            ->whereNull('data_saida')
+            ->latest('data_entrada');
     }
 
     public function scopeAtivos($q)
@@ -101,10 +109,13 @@ class Veiculo extends Model
         return $q->where('ativo', true);
     }
 
+    /** ✅ Regra nova: filtra pela lotação atual (aberta) */
     public function scopePorOpm($q, ?int $opmId)
     {
         if (!empty($opmId)) {
-            $q->where('opm_id', $opmId);
+            $q->whereHas('lotacaoAtual', function ($l) use ($opmId) {
+                $l->where('opm_id', $opmId);
+            });
         }
         return $q;
     }

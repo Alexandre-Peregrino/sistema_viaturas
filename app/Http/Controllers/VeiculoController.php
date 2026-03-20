@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Veiculo;
 use App\Models\Opm;
+use App\Models\Usuario;
 use App\Models\Radio;
 use App\Models\Municipio;
+use App\Models\VeiculoLotacao;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class VeiculoController extends Controller
 {
@@ -23,25 +26,17 @@ class VeiculoController extends Controller
         $usarLotacao  = $request->boolean('usar_lotacao');
         $mostrarTempo = $request->boolean('mostrar_tempo');
 
-        $query = Veiculo::query()->with('opm');
+        // ✅ Regra nova: sempre carregar lotação atual (fonte da verdade)
+        $query = Veiculo::query()->with(['lotacaoAtual.opm', 'lotacaoAtual.municipio']);
 
-        if ($usarLotacao) {
-            if ($request->filled('opm_id')) {
-                $query->whereHas('lotacoes', function ($q) use ($request) {
-                    $q->whereNull('data_saida')->where('opm_id', $request->opm_id);
-                });
-            }
-            $query->with([
-                'lotacoes' => function ($q) {
-                    $q->whereNull('data_saida')->with('opm', 'municipio');
-                }
-            ]);
-        } else {
-            if ($request->filled('opm_id')) {
-                $query->where('opm_id', $request->opm_id);
-            }
+        // ✅ Filtro por OPM: sempre via lotação atual (não via veiculos.opm_id)
+        if ($request->filled('opm_id')) {
+            $query->whereHas('lotacaoAtual', function ($q) use ($request) {
+                $q->where('opm_id', $request->opm_id);
+            });
         }
 
+        // (mantém filtros existentes)
         if ($request->filled('tipos'))        $query->whereIn('tipo_veiculo', (array) $request->tipos);
         if ($request->filled('combustiveis')) $query->whereIn('combustivel', (array) $request->combustiveis);
         if ($request->filled('tracoes'))      $query->whereIn('tracao', (array) $request->tracoes);
@@ -55,8 +50,8 @@ class VeiculoController extends Controller
         return view('admin.relatorios.resultados.viaturas', [
             'viaturas'      => $viaturas,
             'titulo'        => $usarLotacao
-                ? 'Relatório de Viaturas — por Lotação Atual'
-                : 'Relatório de Viaturas — por Cadastro',
+                ? 'Relatório de Viaturas — por Lotação Atual (oficial)'
+                : 'Relatório de Viaturas — por Lotação Atual (oficial)', // ✅ agora é sempre oficial
             'usarLotacao'   => $usarLotacao,
             'mostrarTempo'  => $mostrarTempo,
         ]);
@@ -64,18 +59,16 @@ class VeiculoController extends Controller
 
     public function porOpm(Request $request)
     {
+        // ✅ Lista de OPMs por ordem
         $opms  = Opm::orderBy('sigla')->get(['id', 'sigla']);
         $opmId = (int) $request->input('opm_id');
 
         $veiculos = collect();
 
         if ($opmId) {
-            $veiculos = Veiculo::whereHas('lotacoes', function ($q) use ($opmId) {
-                $q->whereNull('data_saida')->where('opm_id', $opmId);
-            })
-                ->with([
-                    'lotacoes' => fn($q) => $q->whereNull('data_saida')->with('opm', 'municipio'),
-                ])
+            // ✅ Regra nova: por OPM usando lotacaoAtual
+            $veiculos = Veiculo::whereHas('lotacaoAtual', fn($q) => $q->where('opm_id', $opmId))
+                ->with(['lotacaoAtual.opm', 'lotacaoAtual.municipio'])
                 ->withCount('manutencoes')
                 ->orderBy('prefixo')
                 ->paginate(50)
@@ -87,8 +80,9 @@ class VeiculoController extends Controller
 
     private function getFormOptions(): array
     {
-        $opmIds = Veiculo::query()
-            ->whereNotNull('opm_id')
+        // ✅ Regra nova: OPMs “relevantes” vêm das lotações abertas (fonte oficial)
+        $opmIds = VeiculoLotacao::query()
+            ->whereNull('data_saida')
             ->distinct()
             ->pluck('opm_id');
 
@@ -171,11 +165,25 @@ class VeiculoController extends Controller
             $request->merge(['numero_serie_radio' => $v === '' ? null : $v]);
         }
 
-        foreach ([
-            'marca_modelo','cidade','area','tracao','categoria','emprego','layout',
-            'situacao_carga','proprietario','contrato','processo_sei','observacao','status',
-            'tipo_veiculo_outro','combustivel_outro'
-        ] as $k) {
+        foreach (
+            [
+                'marca_modelo',
+                'cidade',
+                'area',
+                'tracao',
+                'categoria',
+                'emprego',
+                'layout',
+                'situacao_carga',
+                'proprietario',
+                'contrato',
+                'processo_sei',
+                'observacao',
+                'status',
+                'tipo_veiculo_outro',
+                'combustivel_outro'
+            ] as $k
+        ) {
             if ($request->has($k) && is_string($request->input($k))) {
                 $v = trim((string) $request->input($k));
                 $request->merge([$k => $v === '' ? null : $v]);
@@ -216,6 +224,28 @@ class VeiculoController extends Controller
         }
     }
 
+    /**
+     * ✅ Resolve usuario_id de forma robusta:
+     * - Se Auth::user() existir e tiver id numérico => usa.
+     * - Senão, tenta interpretar Auth::id() como CPF e buscar usuarios.id.
+     */
+    private function resolveUsuarioId(): ?int
+    {
+        $u = Auth::user();
+        if ($u && isset($u->id) && is_numeric($u->id)) {
+            return (int) $u->id;
+        }
+
+        $authId = Auth::id(); // pode ser CPF no seu projeto
+        if ($authId) {
+            $cpf = (string) $authId;
+            $id = Usuario::where('cpf', $cpf)->value('id');
+            return $id ? (int)$id : null;
+        }
+
+        return null;
+    }
+
     public function store(Request $request)
     {
         // CAPTURA antes de normalizar (senão "Outros" vira null)
@@ -227,44 +257,76 @@ class VeiculoController extends Controller
         $currentYearPlusOne = now()->year + 1;
 
         $statusOptions = [
-            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+            'Ativo',
+            'Baixado',
+            'Em Proc de descarga',
+            'Descarregado',
+            'Entregue a COPAT',
+            'Devolvido a locadora',
         ];
 
         $tipoOptions = [
-            'SUV','Pickup','Moto','Sedan','Hatch','Van','Caminhonete','Camioneta','Ônibus','Micro-Ônibus','Caminhão','Utilitário','Reboque',
+            'SUV',
+            'Pickup',
+            'Moto',
+            'Sedan',
+            'Hatch',
+            'Van',
+            'Caminhonete',
+            'Camioneta',
+            'Ônibus',
+            'Micro-Ônibus',
+            'Caminhão',
+            'Utilitário',
+            'Reboque',
         ];
 
         $combOptions = [
-            'Gasolina','Diesel','Flex','Álcool','Elétrico','Híbrido','GNV',
+            'Gasolina',
+            'Diesel',
+            'Flex',
+            'Álcool',
+            'Elétrico',
+            'Híbrido',
+            'GNV',
         ];
+
+        $request->merge([
+            'status' => $request->input('status') !== '' ? $request->input('status') : null,
+            'garantia_bateria_meses' => $request->input('garantia_bateria_meses') !== '' ? $request->input('garantia_bateria_meses') : null,
+        ]);
 
         $validated = $request->validate([
             'marca_modelo'   => ['required', 'string', 'max:255'],
             'placa' => [
-                'required','string','size:7','alpha_num',
+                'required',
+                'string',
+                'size:7',
+                'alpha_num',
                 'regex:/^([A-Z]{3}\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/',
                 Rule::unique('veiculos', 'placa'),
             ],
             'prefixo' => ['required', 'string', 'max:255', Rule::unique('veiculos', 'prefixo')],
-            'cidade'  => ['required', 'string', 'max:255'],
+            'cidade'  => ['nullable', 'string', 'max:255'],
             'area'    => ['required', 'string', 'max:255'],
             'opm_id'  => ['required', 'integer', Rule::exists('opms', 'id')],
 
             'chassi'  => ['required', 'string', 'size:17', 'alpha_num', Rule::unique('veiculos', 'chassi')],
             'renavam' => ['required', 'string', 'regex:/^\d{9,11}$/', Rule::unique('veiculos', 'renavam')],
 
-            'status'  => ['required', 'string', Rule::in($statusOptions)],
+            'status'  => ['nullable', 'string', Rule::in($statusOptions)],
             'layout'  => ['required', 'string', 'max:255'],
 
             'numero_serie_radio' => [
-                'nullable','string','max:100',
+                'nullable',
+                'string',
+                'max:100',
                 Rule::exists('radios', 'numero_serie'),
                 Rule::unique('veiculos', 'numero_serie_radio'),
             ],
 
             'ano_fabricacao'     => ['nullable', 'integer', 'between:1900,' . $currentYearPlusOne],
 
-            // IMPORTANTE: aqui NÃO tem required_with! é só nullable.
             'tipo_veiculo'       => ['nullable', 'string', 'max:255', Rule::in($tipoOptions)],
             'tipo_veiculo_outro' => ['nullable', 'string', 'max:255'],
 
@@ -283,13 +345,12 @@ class VeiculoController extends Controller
             'processo_sei'       => ['nullable', 'string', 'max:255'],
 
             'dt_inicial_garantia'    => ['nullable', 'date'],
-            'garantia_bateria_meses' => ['required_with:dt_inicial_garantia', 'integer', 'min:1', 'max:120'],
-
+            'garantia_bateria_meses' => ['nullable', 'integer', 'min:1', 'max:120'],
             'n_serie_bateria'    => ['nullable', 'string', 'max:80'],
 
             'situacao_carga'     => ['required', 'string', 'max:255'],
 
-            'municipio_id'       => ['nullable', 'integer'],
+            'municipio_id'       => ['nullable', 'integer', Rule::exists('municipios', 'id')],
             'observacao'         => ['nullable', 'string'],
         ], [
             'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
@@ -297,17 +358,15 @@ class VeiculoController extends Controller
             'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
             'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
             'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
-            'garantia_bateria_meses.required_with' => 'Informe o prazo de garantia (meses) quando a data inicial estiver preenchida.',
         ]);
 
-        // Agora sim: valida "Outros" usando o valor escolhido ANTES da normalização
         if ($tipoSelecionado === 'Outros') {
             $request->validate([
                 'tipo_veiculo_outro' => ['required', 'string', 'max:255'],
             ], [
                 'tipo_veiculo_outro.required' => 'Informe qual é o tipo do veículo quando selecionar "Outros".',
             ]);
-            $validated['tipo_veiculo'] = null; // CHECK-safe
+            $validated['tipo_veiculo'] = null;
             $validated['tipo_veiculo_outro'] = trim((string)$request->input('tipo_veiculo_outro'));
         } else {
             $validated['tipo_veiculo_outro'] = null;
@@ -319,7 +378,7 @@ class VeiculoController extends Controller
             ], [
                 'combustivel_outro.required' => 'Informe qual é o combustível quando selecionar "Outros".',
             ]);
-            $validated['combustivel'] = null; // CHECK-safe
+            $validated['combustivel'] = null;
             $validated['combustivel_outro'] = trim((string)$request->input('combustivel_outro'));
         } else {
             $validated['combustivel_outro'] = null;
@@ -327,7 +386,33 @@ class VeiculoController extends Controller
 
         $this->applyGarantiaBateria($validated);
 
-        Veiculo::create($validated);
+        // ✅ cidade obrigatória no banco: deriva do município selecionado
+        if (!empty($validated['municipio_id'])) {
+            $municipio = Municipio::query()->find($validated['municipio_id']);
+            $validated['cidade'] = $municipio?->nome;
+        }
+
+        if (empty($validated['cidade'])) {
+            return back()
+                ->withInput()
+                ->withErrors(['municipio_id' => 'Não foi possível preencher a cidade a partir do município selecionado.']);
+        }
+
+        $veiculo = Veiculo::create($validated);
+
+        $usuarioId = $this->resolveUsuarioId();
+
+        // ✅ cria lotação inicial oficial (aberta)
+        VeiculoLotacao::create([
+            'veiculo_id'   => $veiculo->id,
+            'opm_id'       => (int) $validated['opm_id'],
+            'municipio_id' => $validated['municipio_id'] ?? null,
+            'data_entrada' => $validated['entrega_dados_opm'] ?? $validated['aquisicao_dados'] ?? now()->toDateString(),
+            'data_saida'   => null,
+            'motivo'       => 'Cadastro inicial',
+            'observacao'   => null,
+            'usuario_id'   => $usuarioId,
+        ]);
 
         return redirect()
             ->route('admin.viaturas.index')
@@ -336,7 +421,17 @@ class VeiculoController extends Controller
 
     public function edit($id)
     {
-        $veiculo = Veiculo::with('opm')->findOrFail($id);
+        // ✅ traz lotação atual + histórico completo (com OPM/Município/Usuário)
+        $veiculo = Veiculo::with([
+            'opm',
+            'lotacaoAtual.opm',
+            'lotacaoAtual.municipio',
+            'lotacoes' => function ($q) {
+                $q->with(['opm', 'municipio', 'usuario'])
+                    ->orderBy('data_entrada', 'desc')
+                    ->orderBy('id', 'desc');
+            },
+        ])->findOrFail($id);
 
         $radiosDisponiveis = Radio::disponiveis()
             ->orderBy('numero_serie')
@@ -369,7 +464,6 @@ class VeiculoController extends Controller
     {
         $veiculo = Veiculo::findOrFail($id);
 
-        // CAPTURA antes de normalizar
         $tipoSelecionado = $request->input('tipo_veiculo');
         $combSelecionado = $request->input('combustivel');
 
@@ -378,37 +472,65 @@ class VeiculoController extends Controller
         $currentYearPlusOne = now()->year + 1;
 
         $statusOptions = [
-            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+            'Ativo',
+            'Baixado',
+            'Em Proc de descarga',
+            'Descarregado',
+            'Entregue a COPAT',
+            'Devolvido a locadora',
         ];
 
         $tipoOptions = [
-            'SUV','Pickup','Moto','Sedan','Hatch','Van','Caminhonete','Camioneta','Ônibus','Micro-Ônibus','Caminhão','Utilitário','Reboque',
+            'SUV',
+            'Pickup',
+            'Moto',
+            'Sedan',
+            'Hatch',
+            'Van',
+            'Caminhonete',
+            'Camioneta',
+            'Ônibus',
+            'Micro-Ônibus',
+            'Caminhão',
+            'Utilitário',
+            'Reboque',
         ];
 
         $combOptions = [
-            'Gasolina','Diesel','Flex','Álcool','Elétrico','Híbrido','GNV',
+            'Gasolina',
+            'Diesel',
+            'Flex',
+            'Álcool',
+            'Elétrico',
+            'Híbrido',
+            'GNV',
         ];
 
         $validated = $request->validate([
             'marca_modelo'   => ['required', 'string', 'max:255'],
             'placa' => [
-                'required','string','size:7','alpha_num',
+                'required',
+                'string',
+                'size:7',
+                'alpha_num',
                 'regex:/^([A-Z]{3}\d{4}|[A-Z]{3}\d[A-Z]\d{2})$/',
                 Rule::unique('veiculos', 'placa')->ignore($veiculo->id),
             ],
             'prefixo' => ['required', 'string', 'max:255', Rule::unique('veiculos', 'prefixo')->ignore($veiculo->id)],
-            'cidade'  => ['required', 'string', 'max:255'],
+            'cidade'  => ['nullable', 'string', 'max:255'],
             'area'    => ['required', 'string', 'max:255'],
             'opm_id'  => ['required', 'integer', Rule::exists('opms', 'id')],
 
             'chassi'  => ['required', 'string', 'size:17', 'alpha_num', Rule::unique('veiculos', 'chassi')->ignore($veiculo->id)],
             'renavam' => ['required', 'string', 'regex:/^\d{9,11}$/', Rule::unique('veiculos', 'renavam')->ignore($veiculo->id)],
 
-            'status'  => ['required', 'string', Rule::in($statusOptions)],
+            'status'  => ['nullable', 'string', Rule::in($statusOptions)],
             'layout'  => ['required', 'string', 'max:255'],
 
             'numero_serie_radio' => [
-                'nullable','string','max:100',
+                'nullable',
+                'string',
+                'max:100',
                 Rule::exists('radios', 'numero_serie'),
                 Rule::unique('veiculos', 'numero_serie_radio')->ignore($veiculo->id),
             ],
@@ -433,13 +555,12 @@ class VeiculoController extends Controller
             'processo_sei'       => ['nullable', 'string', 'max:255'],
 
             'dt_inicial_garantia'    => ['nullable', 'date'],
-            'garantia_bateria_meses' => ['required_with:dt_inicial_garantia', 'integer', 'min:1', 'max:120'],
-
+            'garantia_bateria_meses' => ['nullable', 'integer', 'min:1', 'max:120'],
             'n_serie_bateria'    => ['nullable', 'string', 'max:80'],
 
             'situacao_carga'     => ['required', 'string', 'max:255'],
 
-            'municipio_id'       => ['nullable', 'integer'],
+            'municipio_id'       => ['nullable', 'integer', Rule::exists('municipios', 'id')],
             'observacao'         => ['nullable', 'string'],
         ], [
             'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
@@ -447,7 +568,6 @@ class VeiculoController extends Controller
             'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
             'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
             'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
-            'garantia_bateria_meses.required_with' => 'Informe o prazo de garantia (meses) quando a data inicial estiver preenchida.',
         ]);
 
         if ($tipoSelecionado === 'Outros') {
@@ -475,8 +595,58 @@ class VeiculoController extends Controller
         }
 
         $this->applyGarantiaBateria($validated);
+        // ✅ cidade obrigatória no banco: deriva do município selecionado
+        if (!empty($validated['municipio_id'])) {
+            $municipio = Municipio::query()->find($validated['municipio_id']);
+            $validated['cidade'] = $municipio?->nome;
+        }
 
+        if (empty($validated['cidade'])) {
+            return back()
+                ->withInput()
+                ->withErrors(['municipio_id' => 'Não foi possível preencher a cidade a partir do município selecionado.']);
+        }
+
+        // --- Detecta troca de OPM/Município para registrar movimentação oficial ---
+        $opmNovo = (int) $validated['opm_id'];
+        $munNovo = $validated['municipio_id'] ?? null;
+
+        $lotacaoAtual = VeiculoLotacao::where('veiculo_id', $veiculo->id)
+            ->whereNull('data_saida')
+            ->latest('data_entrada')
+            ->first();
+
+        $opmAtual = $lotacaoAtual?->opm_id;
+        $munAtual = $lotacaoAtual?->municipio_id;
+
+        $mudouLotacao = ($lotacaoAtual === null)
+            || ((int)$opmAtual !== (int)$opmNovo)
+            || ((string)$munAtual !== (string)$munNovo);
+
+        // Atualiza o veículo (cache + demais campos)
         $veiculo->update($validated);
+
+        // ✅ Só mexe na tabela de movimentações se realmente mudou
+        if ($mudouLotacao) {
+            if ($lotacaoAtual) {
+                $lotacaoAtual->update([
+                    'data_saida' => now()->toDateString(),
+                ]);
+            }
+
+            $usuarioId = $this->resolveUsuarioId();
+
+            VeiculoLotacao::create([
+                'veiculo_id'   => $veiculo->id,
+                'opm_id'       => $opmNovo,
+                'municipio_id' => $munNovo,
+                'data_entrada' => now()->toDateString(),
+                'data_saida'   => null,
+                'motivo'       => 'Alteração de lotação (update)',
+                'observacao'   => null,
+                'usuario_id'   => $usuarioId,
+            ]);
+        }
 
         return redirect()
             ->route('admin.viaturas.index')
@@ -495,7 +665,7 @@ class VeiculoController extends Controller
 
     public function editarRestrito($id)
     {
-        $viatura = Veiculo::with('opm')->findOrFail($id);
+        $viatura = Veiculo::with(['lotacaoAtual.opm', 'lotacaoAtual.municipio'])->findOrFail($id);
         $opms = Opm::all();
 
         return view('p4.viaturas.editar', compact('viatura', 'opms'));
@@ -508,11 +678,16 @@ class VeiculoController extends Controller
         $this->normalizeRequest($request);
 
         $statusOptions = [
-            'Ativo','Baixado','Em Proc de descarga','Descarregado','Entregue a COPAT','Devolvido a locadora',
+            'Ativo',
+            'Baixado',
+            'Em Proc de descarga',
+            'Descarregado',
+            'Entregue a COPAT',
+            'Devolvido a locadora',
         ];
 
         $validated = $request->validate([
-            'status'         => ['required', 'string', Rule::in($statusOptions)],
+            'status'         => ['nullable', 'string', Rule::in($statusOptions)],
             'situacao_carga' => ['nullable', 'string', 'max:255'],
             'observacao'     => ['nullable', 'string'],
         ]);

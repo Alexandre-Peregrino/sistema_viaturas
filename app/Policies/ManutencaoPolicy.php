@@ -9,14 +9,14 @@ class ManutencaoPolicy
 {
     /**
      * Admin pode tudo em qualquer ação desta Policy.
-     * Evita 403 acidentais quando faltar algum método.
      */
     public function before(Usuario $user)
     {
         if ($user->isAdmin()) {
             return true;
         }
-        // retornar null deixa seguir para os outros métodos
+
+        return null; // segue para os outros métodos
     }
 
     /**
@@ -24,11 +24,11 @@ class ManutencaoPolicy
      */
     public function viewAny(Usuario $user): bool
     {
-        return $user->isP4();
+        return $user->isP4() || $user->isAdmin();
     }
 
     /**
-     * Ver detalhe: P4 só se a manutenção for de veículo da sua OPM.
+     * Ver detalhe: P4 só se for de veículo da sua OPM.
      */
     public function view(Usuario $user, Manutencao $manutencao): bool
     {
@@ -37,7 +37,16 @@ class ManutencaoPolicy
     }
 
     /**
-     * Editar/Atualizar: mesma regra do view.
+     * Criar: P4 pode criar para sua OPM (normalmente o controller já amarra o veiculo_id).
+     * Se você não quiser que P4 crie, retorne false.
+     */
+    public function create(Usuario $user): bool
+    {
+        return $user->isP4();
+    }
+
+    /**
+     * Atualizar: mesma regra do view.
      */
     public function update(Usuario $user, Manutencao $manutencao): bool
     {
@@ -46,10 +55,24 @@ class ManutencaoPolicy
     }
 
     /**
-     * Excluir: somente Admin (já coberto pelo before, mas deixo explícito).
+     * Excluir: somente Admin (P4 não pode).
+     * Admin já foi liberado no before().
      */
     public function delete(Usuario $user, Manutencao $manutencao): bool
     {
-        return false; // Admin já foi liberado no before(); P4 não pode
+        return false;
+    }
+
+    /**
+     * Opcional: se usar SoftDeletes no futuro.
+     */
+    public function restore(Usuario $user, Manutencao $manutencao): bool
+    {
+        return false;
+    }
+
+    public function forceDelete(Usuario $user, Manutencao $manutencao): bool
+    {
+        return false;
     }
 }

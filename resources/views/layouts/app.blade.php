@@ -210,6 +210,12 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    @yield('scripts')
+
+    {{-- jQuery (necessário para Select2) --}}
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    {{-- Scripts empilhados pelas views via @push('scripts') --}}
+    @stack('scripts')
+
 </body>
 </html>

@@ -4,10 +4,10 @@
      * Partial de formulário para create/edit.
      * Espera receber:
      * - $veiculo (Model/objeto) ou null
-     * - (opcional) $opms (Collection) para select OPM
-     * - (opcional) $municipios (Collection) para select município
-     * - (opcional) $cidades (Collection<string>) select cidade (da tabela veiculos)
-     * - (opcional) $areas (Collection<string>) select area (da tabela veiculos)
+     * - (opcional) $areas (Collection<string>) (pode vir vazio; JS pode carregar)
+     *
+     * OBS: Município agora é gravado em veiculos.municipio_id (FK).
+     *      Evitar duplicação: não expomos veiculos.cidade aqui; derive no backend.
      */
 
     $val = function(string $field, $default = null) use ($veiculo) {
@@ -33,7 +33,6 @@
         'Devolvido a locadora',
     ];
 
-    // TIPOS (o valor "Outros" não será gravado no tipo_veiculo; será gravado no campo tipo_veiculo_outro)
     $tiposVeiculo = [
         'SUV',
         'Pickup',
@@ -51,7 +50,6 @@
         'Outros',
     ];
 
-    // COMBUSTÍVEIS (o valor "Outros" não será gravado no combustivel; será gravado no campo combustivel_outro)
     $combustiveis = [
         'Gasolina',
         'Diesel',
@@ -63,9 +61,33 @@
         'Outros',
     ];
 
-    // Se tiver "detalhe outro" salvo no banco, forçamos o select para "Outros" no edit
     $tipoIsOutros = (string)$val('tipo_veiculo') === '' && (string)$val('tipo_veiculo_outro') !== '';
     $combIsOutros = (string)$val('combustivel') === '' && (string)$val('combustivel_outro') !== '';
+
+    $isEdit = !empty($veiculo) && !empty($veiculo->id);
+
+    $lotAtual = null;
+    try {
+        if ($isEdit) {
+            if (method_exists($veiculo, 'lotacaoAtual')) {
+                $lotAtual = $veiculo->lotacaoAtual ?? null;
+            }
+            if (!$lotAtual && isset($veiculo->lotacoes)) {
+                $lotAtual = $veiculo->lotacoes->firstWhere('data_saida', null);
+            }
+        }
+    } catch (\Throwable $e) {
+        $lotAtual = null;
+    }
+
+    $lotOpmSigla = $lotAtual?->opm?->sigla ?? null;
+    $lotOpmNome  = $lotAtual?->opm?->nome ?? null;
+    $lotEntrada  = $lotAtual?->data_entrada ? \Illuminate\Support\Carbon::parse($lotAtual->data_entrada)->format('d/m/Y') : null;
+
+    // valores selecionados (edit / old)
+    $selectedCpr         = (string) $val('area', '');
+    $selectedMunicipioId = (string) $val('municipio_id', '');
+    $selectedOpmId       = (string) $val('opm_id', '');
 @endphp
 
 {{-- =========================
@@ -128,61 +150,70 @@
     @error('numero_serie_radio') <div class="invalid-feedback">{{ $message }}</div> @enderror
 </div>
 
+{{-- CPR (topo) --}}
 <div class="col-md-4">
-    <label class="form-label">Cidade/Município <span class="text-danger">*</span></label>
-    <select name="cidade" class="form-select @error('cidade') is-invalid @enderror" required>
-        <option value="">Selecione...</option>
-        @isset($cidades)
-            @foreach($cidades as $c)
-                <option value="{{ $c }}" @selected((string)$val('cidade') === (string)$c)>{{ $c }}</option>
-            @endforeach
-        @endisset
-    </select>
-    @error('cidade') <div class="invalid-feedback">{{ $message }}</div> @enderror
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">Área <span class="text-danger">*</span></label>
-    <select name="area" class="form-select @error('area') is-invalid @enderror" required>
+    <label class="form-label">CPR (Área) <span class="text-danger">*</span></label>
+    <select name="area" id="area" data-selected="{{ $selectedCpr }}"
+            class="form-select @error('area') is-invalid @enderror" required>
         <option value="">Selecione...</option>
         @isset($areas)
             @foreach($areas as $a)
-                <option value="{{ $a }}" @selected((string)$val('area') === (string)$a)>{{ $a }}</option>
+                <option value="{{ $a }}" @selected((string)$selectedCpr === (string)$a)>{{ $a }}</option>
             @endforeach
         @endisset
     </select>
     @error('area') <div class="invalid-feedback">{{ $message }}</div> @enderror
+    <div class="form-text">O CPR define a lista de OPMs e, por OPM, os municípios de cobertura.</div>
 </div>
 
+{{-- ✅ Movimentações (lotação) + OPM --}}
 <div class="col-md-4">
+    @if($isEdit)
+        <div class="alert alert-info py-2 mb-2">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-clock-history"></i>
+                <div>
+                    <div class="fw-semibold">Movimentações (lotação)</div>
+
+                    @if($lotAtual)
+                        <div class="small">
+                            Lotação atual:
+                            <strong>{{ $lotOpmSigla ?? ('OPM #'.$lotAtual->opm_id) }}</strong>
+                            @if($lotOpmNome) <span class="text-muted">— {{ $lotOpmNome }}</span> @endif
+                            @if($lotEntrada) <span class="text-muted">(desde {{ $lotEntrada }})</span> @endif
+                        </div>
+
+                        <div class="small text-muted">
+                            Ao alterar a OPM e salvar, o sistema fecha a lotação atual e cria uma nova movimentação automaticamente.
+                        </div>
+                    @else
+                        <div class="small"><strong>Sem lotação aberta registrada.</strong></div>
+                        <div class="small text-muted">
+                            Ao salvar, o sistema criará uma lotação inicial automaticamente (regularização).
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
     <label class="form-label">OPM <span class="text-danger">*</span></label>
-
-    @isset($opms)
-        <select name="opm_id" class="form-select @error('opm_id') is-invalid @enderror" required>
-            <option value="">Selecione...</option>
-
-            @foreach($opms as $opm)
-                @php
-                    $sigla = $opm->sigla ?? null;
-                    $nome  = $opm->nome  ?? null;
-
-                    $label = $sigla ?: ($nome ?: ('OPM #'.$opm->id));
-                    if ($sigla && $nome) $label = $sigla . ' — ' . $nome;
-                @endphp
-
-                <option value="{{ $opm->id }}" @selected((string)$val('opm_id') === (string)$opm->id)>
-                    {{ $label }}
-                </option>
-            @endforeach
-        </select>
-    @else
-        <input type="number" name="opm_id"
-               class="form-control @error('opm_id') is-invalid @enderror"
-               value="{{ $val('opm_id') }}" required min="1">
-        <div class="form-text">Dica: passe <code>$opms</code> do controller para virar um select.</div>
-    @endisset
-
+    <select name="opm_id" id="opm_id" data-selected="{{ $selectedOpmId }}"
+            class="form-select @error('opm_id') is-invalid @enderror" required>
+        <option value="">Selecione...</option>
+    </select>
     @error('opm_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+</div>
+
+{{-- Município (FK) --}}
+<div class="col-md-4">
+    <label class="form-label">Município <span class="text-danger">*</span></label>
+    <select name="municipio_id" id="municipio_id" data-selected="{{ $selectedMunicipioId }}"
+            class="form-select @error('municipio_id') is-invalid @enderror" required>
+        <option value="">Selecione...</option>
+    </select>
+    @error('municipio_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+    <div class="form-text">Municípios carregados conforme cobertura da OPM.</div>
 </div>
 
 {{-- =========================
@@ -211,7 +242,6 @@
     @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
 </div>
 
-{{-- TIPO VEÍCULO (SELECT + OUTROS) --}}
 <div class="col-md-3">
     <label class="form-label">Tipo veículo</label>
     <select name="tipo_veiculo" id="tipo_veiculo" class="form-select @error('tipo_veiculo') is-invalid @enderror">
@@ -247,7 +277,6 @@
     @error('tracao') <div class="invalid-feedback">{{ $message }}</div> @enderror
 </div>
 
-{{-- COMBUSTÍVEL (SELECT + OUTROS + ÁLCOOL) --}}
 <div class="col-md-3">
     <label class="form-label">Combustível</label>
     <select name="combustivel" id="combustivel" class="form-select @error('combustivel') is-invalid @enderror">
@@ -421,7 +450,7 @@
     @error('observacao') <div class="invalid-feedback">{{ $message }}</div> @enderror
 </div>
 
-@section('scripts')
+@push('scripts')
 <script>
     // Normalizações simples (upper + alfanumérico)
     const upperAlnum = (id) => {
@@ -436,9 +465,6 @@
     upperAlnum('prefixo');
     upperAlnum('chassi');
     upperAlnum('renavam');
-
-    // Rádio: se quiser normalizar (opcional), mantenha alfanumérico
-    // upperAlnum('numero_serie_radio');
 
     // ---------- Helpers data ----------
     function addMonthsNoOverflow(dateObj, months) {
@@ -540,5 +566,153 @@
     dtIni?.addEventListener('change', updateGarantia);
     meses?.addEventListener('input', updateGarantia);
     updateGarantia();
+
+    // ================================
+    // CPR -> OPM -> Municípios (cobertura real)
+    // ================================
+    (function () {
+        const selCpr       = document.getElementById('area');
+        const selOpm       = document.getElementById('opm_id');
+        const selMunicipio = document.getElementById('municipio_id');
+
+        if (!selCpr || !selOpm || !selMunicipio) return;
+
+        const urlCprs = @json(route('admin.ajax.cprs'));
+        const urlOpms = @json(route('admin.ajax.opms_por_cpr'));
+        const urlMunicipiosPorOpm = @json(route('admin.ajax.municipios_por_opm'));
+
+        const selectedCpr = selCpr.dataset.selected || '';
+        const selectedOpmId = selOpm.dataset.selected || '';
+        const selectedMunicipioId = selMunicipio.dataset.selected || '';
+
+        function setLoading(selectEl, loading = true) {
+            if (!selectEl) return;
+            selectEl.disabled = loading;
+            selectEl.classList.toggle('opacity-75', loading);
+        }
+
+        function resetSelect(selectEl, placeholder = 'Selecione...') {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = placeholder;
+            selectEl.appendChild(opt);
+        }
+
+        async function fetchJson(url) {
+            const res = await fetch(url, {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return await res.json();
+        }
+
+        async function loadCprs() {
+            if (selCpr.options.length > 1) {
+                if (selectedCpr) selCpr.value = selectedCpr;
+                return;
+            }
+
+            setLoading(selCpr, true);
+            resetSelect(selCpr);
+
+            try {
+                const cprs = await fetchJson(urlCprs);
+                cprs.forEach((cpr) => {
+                    const opt = document.createElement('option');
+                    opt.value = cpr;
+                    opt.textContent = cpr;
+                    selCpr.appendChild(opt);
+                });
+
+                if (selectedCpr) selCpr.value = selectedCpr;
+            } catch (e) {
+                console.error('Falha ao carregar CPRs', e);
+            } finally {
+                setLoading(selCpr, false);
+            }
+        }
+
+        async function loadOpms(cpr) {
+            setLoading(selOpm, true);
+            resetSelect(selOpm);
+
+            resetSelect(selMunicipio, 'Selecione a OPM primeiro...');
+            selMunicipio.disabled = true;
+
+            try {
+                if (!cpr) return;
+
+                const opms = await fetchJson(urlOpms + '?cpr=' + encodeURIComponent(cpr));
+                opms.forEach((o) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(o.id);
+                    opt.textContent = o.label;
+                    selOpm.appendChild(opt);
+                });
+
+                if (selectedOpmId) selOpm.value = selectedOpmId;
+            } catch (e) {
+                console.error('Falha ao carregar OPMs por CPR', e);
+            } finally {
+                setLoading(selOpm, false);
+            }
+        }
+
+        async function loadMunicipiosByOpm(opmId) {
+            setLoading(selMunicipio, true);
+            resetSelect(selMunicipio);
+
+            try {
+                if (!opmId) {
+                    resetSelect(selMunicipio, 'Selecione a OPM primeiro...');
+                    selMunicipio.disabled = true;
+                    return;
+                }
+
+                const municipios = await fetchJson(urlMunicipiosPorOpm + '?opm_id=' + encodeURIComponent(opmId));
+
+                municipios.forEach((m) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(m.id);
+                    opt.textContent = m.label;
+                    selMunicipio.appendChild(opt);
+                });
+
+                selMunicipio.disabled = false;
+
+                if (selectedMunicipioId) selMunicipio.value = selectedMunicipioId;
+            } catch (e) {
+                console.error('Falha ao carregar municípios por OPM', e);
+                resetSelect(selMunicipio, 'Erro ao carregar municípios');
+                selMunicipio.disabled = true;
+            } finally {
+                setLoading(selMunicipio, false);
+            }
+        }
+
+        (async function init() {
+            resetSelect(selMunicipio, 'Selecione a OPM primeiro...');
+            selMunicipio.disabled = true;
+
+            await loadCprs();
+            await loadOpms(selCpr.value);
+            await loadMunicipiosByOpm(selOpm.value);
+        })();
+
+        selCpr.addEventListener('change', async () => {
+            selOpm.dataset.selected = '';
+            selMunicipio.dataset.selected = '';
+            await loadOpms(selCpr.value);
+            await loadMunicipiosByOpm(selOpm.value);
+        });
+
+        selOpm.addEventListener('change', async () => {
+            selMunicipio.dataset.selected = '';
+            await loadMunicipiosByOpm(selOpm.value);
+        });
+    })();
 </script>
-@endsection
+@endpush

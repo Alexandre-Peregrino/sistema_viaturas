@@ -31,13 +31,12 @@
         </div>
 
         <div class="card-body">
-            <form method="POST" action="{{ route('admin.viaturas.store') }}" class="row g-3">
+            <form method="POST" action="{{ route('admin.viaturas.store') }}" class="row g-3" id="formVeiculo">
                 @csrf
 
                 @include('admin.viaturas._form', [
                     'veiculo' => $veiculo ?? null,
-                    // 'opms' => $opms ?? null,
-                    // 'municipios' => $municipios ?? null,
+                    // opcional: 'areas' => $areas ?? null,
                 ])
 
                 <div class="col-12 d-flex gap-2 mt-2">

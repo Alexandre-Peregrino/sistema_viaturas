@@ -1,6 +1,13 @@
+{{-- PATH: resources/views/consultas/viaturas/index.blade.php --}}
+
 @extends('layouts.app')
 
 @section('content')
+@php
+    // Se não vier (por algum motivo), assume que executou (compat)
+    $executou = isset($executouConsulta) ? (bool) $executouConsulta : true;
+@endphp
+
 <div class="container-fluid">
     <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
         <div>
@@ -15,10 +22,18 @@
                 <i class="bi bi-eraser"></i> Limpar
             </a>
 
-            <a class="btn btn-outline-success"
-               href="{{ route('consultas.viaturas', array_merge(request()->query(), ['format' => 'csv'])) }}">
-                <i class="bi bi-filetype-csv"></i> Exportar CSV
-            </a>
+            {{-- Exportar CSV: só habilita após executar consulta --}}
+            @if($executou)
+                <a class="btn btn-outline-success"
+                   href="{{ route('consultas.viaturas', array_merge(request()->query(), ['format' => 'csv'])) }}">
+                    <i class="bi bi-filetype-csv"></i> Exportar CSV
+                </a>
+            @else
+                <button class="btn btn-outline-success" type="button" disabled
+                        title="Aplique ao menos um filtro antes de exportar">
+                    <i class="bi bi-filetype-csv"></i> Exportar CSV
+                </button>
+            @endif
 
             <button class="btn btn-primary" form="formFiltros">
                 <i class="bi bi-funnel"></i> Aplicar
@@ -105,7 +120,6 @@
                                         <div class="form-text">
                                             Selecione uma ou mais unidades, ou “Todas as unidades”.
                                         </div>
-
                                     </div>
                                 </div>
                             </div>
@@ -241,137 +255,157 @@
 
         {{-- RESULTADOS --}}
         <div class="col-12 col-lg-9 col-xl-10">
-            <div class="row g-3 mb-3">
-                <div class="col-12 col-md-4">
-                    <div class="card shadow-sm">
-                        <div class="card-body">
-                            <div class="text-muted small">Total (filtro aplicado)</div>
-                            <div class="fs-3 fw-bold">{{ $summary['total'] ?? 0 }}</div>
+
+            {{-- ✅ Resumo: só quando executou e existe summary --}}
+            @if($executou && !empty($summary))
+                <div class="row g-3 mb-3">
+                    <div class="col-12 col-md-4">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="text-muted small">Total (filtro aplicado)</div>
+                                <div class="fs-3 fw-bold">{{ $summary['total'] ?? 0 }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="text-muted small">{{ $summary['label'] ?? 'Resumo' }}</div>
+                                <div class="small">Clique em um item do resumo para aplicar o filtro automaticamente (drill-down).</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-12 col-md-8">
-                    <div class="card shadow-sm">
-                        <div class="card-body">
-                            <div class="text-muted small">{{ $summary['label'] ?? 'Resumo' }}</div>
-                            <div class="small">Clique em um item do resumo para aplicar o filtro automaticamente (drill-down).</div>
+
+                {{-- Resumo agrupado --}}
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                        <div class="fw-semibold"><i class="bi bi-bar-chart-line me-2"></i> {{ $summary['label'] ?? 'Resumo' }}</div>
+                        <div class="text-muted small">Top 200</div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 70%;">Item</th>
+                                        <th class="text-end">Qtd</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse(($summary['rows'] ?? []) as $r)
+                                        <tr>
+                                            <td>
+                                                <a class="text-decoration-none fw-semibold" href="{{ $r->drill_url }}">
+                                                    {{ $r->label }}
+                                                </a>
+                                                @if(property_exists($r, 'key_id') && $r->key_id)
+                                                    <span class="text-muted small ms-1">#{{ $r->key_id }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-end fw-bold">{{ $r->total }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="2" class="text-center text-muted py-4">Sem dados para o resumo.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
-            </div>
+            @endif
 
-            {{-- Resumo agrupado --}}
-            <div class="card shadow-sm mb-3">
-                <div class="card-header bg-white d-flex align-items-center justify-content-between">
-                    <div class="fw-semibold"><i class="bi bi-bar-chart-line me-2"></i> {{ $summary['label'] ?? 'Resumo' }}</div>
-                    <div class="text-muted small">Top 200</div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 70%;">Item</th>
-                                    <th class="text-end">Qtd</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse(($summary['rows'] ?? []) as $r)
-                                    <tr>
-                                        <td>
-                                            <a class="text-decoration-none fw-semibold" href="{{ $r->drill_url }}">
-                                                {{ $r->label }}
-                                            </a>
-                                            @if(property_exists($r, 'key_id') && $r->key_id)
-                                                <span class="text-muted small ms-1">#{{ $r->key_id }}</span>
-                                            @endif
-                                        </td>
-                                        <td class="text-end fw-bold">{{ $r->total }}</td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="2" class="text-center text-muted py-4">Sem dados para o resumo.</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Lista detalhada --}}
+            {{-- ✅ Card da lista: SEMPRE aparece (para exibir quantidade) --}}
             <div class="card shadow-sm">
                 <div class="card-header bg-white d-flex align-items-center justify-content-between">
                     <div class="fw-semibold"><i class="bi bi-list-ul me-2"></i> Lista de viaturas</div>
+
                     <div class="text-muted small">
-                        {{ $viaturas->total() }} encontradas
+                        @if(!$executou)
+                            {{ $totalGeral ?? 0 }} viaturas cadastradas no sistema
+                        @else
+                            {{ $viaturas->total() }} encontradas
+                            <span class="ms-1">de {{ $totalGeral ?? 0 }}</span>
+                        @endif
                     </div>
                 </div>
 
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Prefixo</th>
-                                    <th>Placa</th>
-                                    <th>Marca/Modelo</th>
-                                    <th>Ano</th>
-                                    <th>Tração</th>
-                                    <th>Comb.</th>
-                                    <th>Cidade</th>
-                                    <th>Área</th>
-                                    <th>OPM</th>
-                                    <th class="text-center">Ativo</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($viaturas as $v)
-                                    <tr>
-                                        <td class="fw-semibold">{{ $v->prefixo }}</td>
-                                        <td>{{ $v->placa }}</td>
-                                        <td>
-                                            @php
-                                                $mm = trim(($v->marca ?? '') . ' ' . ($v->modelo ?? ''));
-                                                if ($mm === '') {
-                                                    $mm = $v->marca_modelo ?? '-';
-                                                }
-                                            @endphp
-                                            <div class="fw-semibold">{{ $mm }}</div>
-                                            <div class="text-muted small">{{ $v->tipo_veiculo ?? '-' }}</div>
-                                        </td>
-                                        <td>
-                                            <div class="small">Fab: {{ $v->ano_fabricacao ?? '-' }}</div>
-                                            <div class="small text-muted">Mod: {{ $v->ano_modelo ?? '-' }}</div>
-                                        </td>
-                                        <td>{{ $v->tracao ?? '-' }}</td>
-                                        <td>{{ $v->combustivel ?? '-' }}</td>
-                                        <td>{{ $v->cidade ?? '-' }}</td>
-                                        <td>{{ $v->area ?? '-' }}</td>
-                                        <td>
-                                            <div class="fw-semibold">{{ $v->opm->sigla ?? '(sem OPM)' }}</div>
-                                        </td>
-                                        <td class="text-center">
-                                            @if($v->ativo)
-                                                <span class="badge bg-success">SIM</span>
-                                            @else
-                                                <span class="badge bg-secondary">NÃO</span>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="10" class="text-center text-muted py-4">Nenhuma viatura encontrada com os filtros atuais.</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                @if(!$executou)
+                    <div class="card-body">
+                        <div class="alert alert-info mb-0">
+                            Por padrão, nenhuma viatura é exibida. Selecione filtros e clique em <strong>Aplicar</strong>.
+                        </div>
                     </div>
+                @else
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Prefixo</th>
+                                        <th>Placa</th>
+                                        <th>Marca/Modelo</th>
+                                        <th>Ano</th>
+                                        <th>Tração</th>
+                                        <th>Comb.</th>
+                                        <th>Cidade</th>
+                                        <th>Área</th>
+                                        <th>OPM</th>
+                                        <th class="text-center">Ativo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($viaturas as $v)
+                                        <tr>
+                                            <td class="fw-semibold">{{ $v->prefixo }}</td>
+                                            <td>{{ $v->placa }}</td>
+                                            <td>
+                                                @php
+                                                    $mm = trim(($v->marca ?? '') . ' ' . ($v->modelo ?? ''));
+                                                    if ($mm === '') {
+                                                        $mm = $v->marca_modelo ?? '-';
+                                                    }
+                                                @endphp
+                                                <div class="fw-semibold">{{ $mm }}</div>
+                                                <div class="text-muted small">{{ $v->tipo_veiculo ?? '-' }}</div>
+                                            </td>
+                                            <td>
+                                                <div class="small">Fab: {{ $v->ano_fabricacao ?? '-' }}</div>
+                                                <div class="small text-muted">Mod: {{ $v->ano_modelo ?? '-' }}</div>
+                                            </td>
+                                            <td>{{ $v->tracao ?? '-' }}</td>
+                                            <td>{{ $v->combustivel ?? '-' }}</td>
+                                            <td>{{ $v->cidade ?? '-' }}</td>
+                                            <td>{{ $v->area ?? '-' }}</td>
+                                            <td>
+                                                <div class="fw-semibold">{{ $v->opm->sigla ?? '(sem OPM)' }}</div>
+                                            </td>
+                                            <td class="text-center">
+                                                @if($v->ativo)
+                                                    <span class="badge bg-success">SIM</span>
+                                                @else
+                                                    <span class="badge bg-secondary">NÃO</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="10" class="text-center text-muted py-4">
+                                                Nenhuma viatura encontrada com os filtros atuais.
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
 
-                    <div class="p-3">
-                        {{ $viaturas->links() }}
+                        <div class="p-3">
+                            {{ $viaturas->links() }}
+                        </div>
                     </div>
-                </div>
+                @endif
             </div>
 
         </div>

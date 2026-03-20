@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VeiculoLotacao extends Model
 {
@@ -19,6 +20,8 @@ class VeiculoLotacao extends Model
         'data_entrada',
         'data_saida',
         'motivo',
+        'observacao',
+        'usuario_id',
     ];
 
     protected $casts = [
@@ -28,19 +31,24 @@ class VeiculoLotacao extends Model
 
     /* --------- Relações --------- */
 
-    public function veiculo()
+    public function veiculo(): BelongsTo
     {
         return $this->belongsTo(Veiculo::class);
     }
 
-    public function opm()
+    public function opm(): BelongsTo
     {
         return $this->belongsTo(Opm::class);
     }
 
-    public function municipio()
+    public function municipio(): BelongsTo
     {
         return $this->belongsTo(Municipio::class);
+    }
+
+    public function usuario(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class);
     }
 
     /* --------- Acessors/Helpers --------- */
@@ -57,7 +65,7 @@ class VeiculoLotacao extends Model
 
     public static function abrir(array $attrs): self
     {
-        // espera: veiculo_id, opm_id, municipio_id?, data_entrada?, motivo?
+        // espera: veiculo_id, opm_id, municipio_id?, data_entrada?, motivo?, observacao?, usuario_id?
         $attrs['data_entrada'] = $attrs['data_entrada'] ?? now()->toDateString();
         return static::create($attrs);
     }

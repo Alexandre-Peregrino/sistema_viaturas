@@ -83,6 +83,9 @@ Route::prefix('consultas')
     ->group(function () {
         Route::get('/viaturas', [ConsultaController::class, 'viaturas'])->name('viaturas');
         Route::get('/opms', [ConsultaController::class, 'opms'])->name('opms');
+        Route::get('/opms/search', [ConsultaController::class, 'opmsSearch'])
+            ->name('opms.search');
+
 
         // Dashboard admin (se logado, você pode validar admin no controller)
         Route::get('/dashboard/admin', [ConsultaController::class, 'dashboardAdmin'])->name('dashboard.admin');
@@ -216,6 +219,25 @@ Route::middleware(['auth', 'cadastro_completo', 'permitido'])->group(function ()
         Route::get('/admin/relatorios/rotaweb/console', function () {
             return view('admin.relatorios.rotaweb_console');
         })->name('admin.relatorios.rotaweb.console');
+        // ✅ AJAX (dependentes): Área -> OPM -> Municípios/Cidades
+        Route::get('/admin/ajax/opms-por-area', [\App\Http\Controllers\Admin\AjaxController::class, 'opmsPorArea'])
+            ->name('admin.ajax.opms_por_area');
+
+        Route::get('/admin/ajax/municipios-por-opm', [\App\Http\Controllers\Admin\AjaxController::class, 'municipiosPorOpm'])
+            ->name('admin.ajax.municipios_por_opm');
+
+        // ✅ NOVO: CPR -> Cidades -> OPMs (para formulário de viaturas)
+        Route::get('/admin/ajax/cprs', [\App\Http\Controllers\Admin\AjaxController::class, 'cprs'])
+            ->name('admin.ajax.cprs');
+
+        Route::get('/admin/ajax/cidades-por-cpr', [\App\Http\Controllers\Admin\AjaxController::class, 'cidadesPorCpr'])
+            ->name('admin.ajax.cidades_por_cpr');
+
+        Route::get('/admin/ajax/opms-por-cpr', [\App\Http\Controllers\Admin\AjaxController::class, 'opmsPorCpr'])
+            ->name('admin.ajax.opms_por_cpr');
+
+        Route::get('/admin/ajax/municipios-por-cpr', [\App\Http\Controllers\Admin\AjaxController::class, 'municipiosPorCpr'])
+            ->name('admin.ajax.municipios_por_cpr');
     });
 
     /*
