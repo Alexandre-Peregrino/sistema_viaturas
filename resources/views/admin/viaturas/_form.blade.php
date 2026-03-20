@@ -610,11 +610,6 @@
         }
 
         async function loadCprs() {
-            if (selCpr.options.length > 1) {
-                if (selectedCpr) selCpr.value = selectedCpr;
-                return;
-            }
-
             setLoading(selCpr, true);
             resetSelect(selCpr);
 
