@@ -13,7 +13,7 @@
         <div>
             <h3 class="mb-0 text-primary"><i class="bi bi-search"></i> Consultas — Viaturas</h3>
             <div class="text-muted small">
-                Combine filtros (AND). Dentro do mesmo filtro, múltiplas opções funcionam como OR.
+               
             </div>
         </div>
 
@@ -72,18 +72,17 @@
 
                         {{-- Agrupamento --}}
                         <label class="form-label fw-semibold">Agrupar por</label>
-                        <select name="group" class="form-select">
+                        <select name="group" id="group" class="form-select">
                             <option value="" @selected(empty($group))>(Sem agrupamento)</option>
-
-                            <option value="opm"            @selected(($group ?? '') === 'opm')>Unidade (OPM)</option>
-                            <option value="cpr"            @selected(($group ?? '') === 'cpr')>CPR</option>
-                            <option value="opm_cidade"     @selected(($group ?? '') === 'opm_cidade')>Cidade (OPM)</option>
-                            <option value="viatura_cidade" @selected(($group ?? '') === 'viatura_cidade')>Cidade (Viatura)</option>
-                            <option value="area"           @selected(($group ?? '') === 'area')>Área</option>
-                            <option value="ano_fab"        @selected(($group ?? '') === 'ano_fab')>Ano de Fabricação</option>
-                            <option value="ano_mod"        @selected(($group ?? '') === 'ano_mod')>Ano de Modelo</option>
-                            <option value="marca"          @selected(($group ?? '') === 'marca')>Marca</option>
-                            <option value="tracao"         @selected(($group ?? '') === 'tracao')>Tração</option>
+                           
+                            <option value="cpr" @selected(($group ?? '') === 'cpr')>CPR</option>
+                            <option value="opm_cidade" @selected(($group ?? '') === 'opm_cidade')>Cidade </option>
+                            
+                            <option value="area" @selected(($group ?? '') === 'area')>Área</option>
+                            <option value="ano_fab" @selected(($group ?? '') === 'ano_fab')>Ano de Fabricação</option>
+                            <option value="ano_mod" @selected(($group ?? '') === 'ano_mod')>Ano de Modelo</option>
+                            <option value="marca" @selected(($group ?? '') === 'marca')>Marca</option>
+                            <option value="tracao" @selected(($group ?? '') === 'tracao')>Tração</option>
                         </select>
 
                         <hr class="my-3">
@@ -284,36 +283,36 @@
                         <div class="text-muted small">Top 200</div>
                     </div>
                     <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 70%;">Item</th>
-                                        <th class="text-end">Qtd</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse(($summary['rows'] ?? []) as $r)
+                        <!-- NOVO CONTÊINER COM ROLAGEM -->
+                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e0e0e0; padding: 8px; border-radius: 4px; background-color: #fdfdfd;">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light">
                                         <tr>
-                                            <td>
-                                                <a class="text-decoration-none fw-semibold" href="{{ $r->drill_url }}">
-                                                    {{ $r->label }}
-                                                </a>
-                                                @if(property_exists($r, 'key_id') && $r->key_id)
-                                                    <span class="text-muted small ms-1">#{{ $r->key_id }}</span>
-                                                @endif
-                                            </td>
-                                            <td class="text-end fw-bold">{{ $r->total }}</td>
+                                            <th style="width: 70%;">Item</th>
+                                            <th class="text-end">Qtd</th>
                                         </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="2" class="text-center text-muted py-4">Sem dados para o resumo.</td>
-                                        </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        @forelse(($summary['rows'] ?? []) as $r)
+                                            <tr>
+                                                <td>
+                                                    <a class="text-decoration-none fw-semibold" href="{{ $r->drill_url }}">
+                                                        {{ $r->label }}
+                                                    </a>
+                                                </td>
+                                                <td class="text-end fw-bold">{{ $r->total }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="2" class="text-center text-muted py-4">Sem dados para o resumo.</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+                        <!-- FIM DO NOVO CONTÊINER -->
                 </div>
             @endif
 
@@ -324,11 +323,11 @@
 
                     <div class="text-muted small">
                         @if(!$executou)
-                            {{ $totalGeral ?? 0 }} viaturas cadastradas no sistema
-                        @else
-                            {{ $viaturas->total() }} encontradas
-                            <span class="ms-1">de {{ $totalGeral ?? 0 }}</span>
-                        @endif
+                                {{ $totalGeral ?? 0 }} viaturas cadastradas no sistema
+                            @else
+                                {{ $viaturas->count() }} encontradas
+                                <span class="ms-1">de {{ $totalGeral ?? 0 }}</span>
+                            @endif
                     </div>
                 </div>
 
@@ -350,7 +349,7 @@
                                         <th>Ano</th>
                                         <th>Tração</th>
                                         <th>Comb.</th>
-                                        <th>Cidade</th>
+                                        <th>Município</th>
                                         <th>Área</th>
                                         <th>OPM</th>
                                         <th class="text-center">Ativo</th>
@@ -377,10 +376,10 @@
                                             </td>
                                             <td>{{ $v->tracao ?? '-' }}</td>
                                             <td>{{ $v->combustivel ?? '-' }}</td>
-                                            <td>{{ $v->cidade ?? '-' }}</td>
+                                            <td>{{ $v->lotacaoAtual?->municipio?->nome ?? $v->cidade ?? '-' }}</td>
                                             <td>{{ $v->area ?? '-' }}</td>
                                             <td>
-                                                <div class="fw-semibold">{{ $v->opm->sigla ?? '(sem OPM)' }}</div>
+                                                <div class="fw-semibold">{{ $v->lotacaoAtual?->opm?->sigla ?? $v->opm?->sigla ?? '(sem OPM)' }}</div>
                                             </td>
                                             <td class="text-center">
                                                 @if($v->ativo)

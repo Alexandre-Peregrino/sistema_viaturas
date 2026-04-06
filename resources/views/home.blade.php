@@ -42,15 +42,21 @@
                             <div class="mt-4 w-100">
                                 <div class="d-flex justify-content-center flex-wrap">
                                     @if(Auth::user()->isAdmin())
-                                        <a href="{{ route('admin.viaturas.index') }}" class="btn btn-primary btn-lg mx-2 mb-2">Gerenciar Viaturas</a>
-                                        <a href="{{ route('admin.radios.index') }}" class="btn btn-warning btn-lg mx-2 mb-2">Gerenciar Rádios</a>
-                                        <a href="{{ route('admin.usuarios.index') }}" class="btn btn-info btn-lg mx-2 mb-2">Gerenciar Usuários</a>
-                                        <a href="{{ route('admin.relatorios.geral') }}" class="btn btn-secondary btn-lg mx-2 mb-2">Relatórios Gerais</a>
-                                    @elseif(Auth::user()->isP4())
-                                        <a href="{{ route('p4.viaturas.index') }}" class="btn btn-primary btn-lg mx-2 mb-2">Minhas Viaturas</a>
-                                        <a href="{{ route('p4.manutencoes.index') }}" class="btn btn-info btn-lg mx-2 mb-2">Minhas Manutenções</a>
-                                        <a href="{{ route('p4.radios.index') }}" class="btn btn-warning btn-lg mx-2 mb-2">Meus Rádios</a>
-                                        <a href="{{ route('p4.relatorios.index') }}" class="btn btn-secondary btn-lg mx-2 mb-2">Relatórios</a>
+                                        <a href="{{ route('admin.viaturas.index') }}" class="btn btn-primary btn-lg mx-2 mb-2">
+                                            Gerenciar Viaturas
+                                        </a>
+
+                                        <a href="{{ route('em_construcao') }}" class="btn btn-warning btn-lg mx-2 mb-2">
+                                            Gerenciar Rádios
+                                        </a>
+
+                                        <a href="{{ route('admin.usuarios.index') }}" class="btn btn-info btn-lg mx-2 mb-2">
+                                            Gerenciar Usuários
+                                        </a>
+
+                                        <a href="{{ route('em_construcao') }}" class="btn btn-secondary btn-lg mx-2 mb-2">
+                                            Relatórios Gerais
+                                        </a>
                                     @endif
                                     
                                     <form action="{{ route('logout') }}" method="POST" class="d-inline">

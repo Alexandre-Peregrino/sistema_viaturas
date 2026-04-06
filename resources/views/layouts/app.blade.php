@@ -17,43 +17,108 @@
 
     <!-- Custom Styles for full height sidebar and main content background -->
     <style>
-        html, body, #app {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-        main {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        .row.main-content-row {
-            flex-grow: 1;
-        }
+    /* Variáveis para light/dark */
+    :root {
+    --bg-body: #121313;      
+    --bg-main: #061a57;      
+    --bg-card: #e8ebf0;      
+    --bg-input: #f2f4f7;     
+    --bg-sidebar: #506487;   
+    --text-primary: #000000; 
+    --text-secondary: #000000; 
+    --border: #151616;       
+    }
 
-        /* Destaque do item ativo no menu lateral */
-        .sidebar-link.active {
-            background-color: rgba(255,255,255,0.20) !important;
-            font-weight: 600;
-        }
-        .sidebar-link:hover {
-            background-color: rgba(255,255,255,0.12) !important;
-        }
+    [data-theme="dark"] {
+    --bg-body: #121212;
+    --bg-main: #151515;
+    --bg-card: #1f1f1f; /* Cards bem escuros */
+    --bg-input: #2d2d2d;
+    --bg-sidebar: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+    --text-primary: #2e2b2b; /* Off-white suave, sem agressão */
+    --text-secondary: #beb5b5;
+    --border: #ffffff;
+    }
 
-        /* ✅ Fundo principal mais confortável (menos “branco chapado”) */
-        .main-pane {
-            background-color: #dfe3e8;
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-        }
+    html, body, #app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-body) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.3s ease;
+    }
 
+    main { flex-grow: 1; display: flex; flex-direction: column; }
+    .row.main-content-row { flex-grow: 1; }
 
-        /* ✅ Opcional: melhora leitura quando há cards/forms */
-        .main-pane .card {
-            background-color: #f5f7fa;
-            border-color: rgba(0,0,0,.08);
-        }
+    .col-md-2 { background: var(--bg-sidebar) !important; }
+    .sidebar-link { color: var(--text-primary) !important; border-color: rgba(255,255,255,0.1) !important; }
+    .sidebar-link.active { background-color: rgba(255,255,255,0.15) !important; font-weight: 600; }
+    .sidebar-link:hover { background-color: rgba(255,255,255,0.25) !important; }
 
+    .main-pane {
+    background-color: var(--bg-main) !important;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    color: var(--text-primary) !important;
+    }
+
+    /* Cards, tabelas e elementos principais */
+    .main-pane .card,
+    .modal-content,
+    .dropdown-menu {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; /* Sombra para profundidade */
+    }
+    .main-pane table,
+    .modal table {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    }
+    .main-pane th, .main-pane td,
+    .modal th, .modal td {
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    }
+
+    /* Inputs, selects, textareas, popups */
+    .main-pane input, .main-pane select, .main-pane textarea,
+    .modal input, .modal select, .modal textarea,
+    .dropdown-item {
+    background-color: var(--bg-input) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    }
+    .main-pane input::placeholder,
+    .modal input::placeholder {
+    color: var(--text-secondary) !important;
+    }
+
+    /* Botões e hover */
+    .main-pane button,
+    .modal button {
+    background-color: var(--bg-sidebar) !important;
+    border-color: var(--bg-sidebar) !important;
+    color: #fff !important;
+    }
+    .main-pane button:hover,
+    .modal button:hover {
+    filter: brightness(1.1);
+    }
+
+    /* Navbar e modais */
+    .navbar { 
+    background-color: var(--bg-card) !important; 
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important; 
+    }
+    .navbar-brand, .nav-link { color: var(--text-primary) !important; }
+
+    /* Sobrescrever Bootstrap modais/popovers */
+    .modal-backdrop { background-color: rgba(0,0,0,0.85) !important; }
+    .popover { background-color: var(--bg-card) !important; color: var(--text-primary) !important; border: 1px solid var(--border) !important; }
     </style>
 
     <!-- Scripts -->
@@ -129,14 +194,14 @@
                                     <i class="bi bi-car-front-fill"></i> Viaturas (todas)
                                 </a>
 
-                                <a href="{{ route('admin.radios.index') }}"
-                                   class="list-group-item list-group-item-action bg-transparent text-white sidebar-link {{ request()->routeIs('admin.radios.*') ? 'active' : '' }}">
+                                <a href="{{ route('em_construcao') }}"
+                                    class="list-group-item list-group-item-action bg-transparent text-white sidebar-link">
                                     <i class="bi bi-broadcast-pin"></i> Rádios (todas)
                                 </a>
 
                                 {{-- NOVO: OPMs (Admin) --}}
-                                <a href="{{ route('admin.opms.index') }}"
-                                   class="list-group-item list-group-item-action bg-transparent text-white sidebar-link {{ request()->routeIs('admin.opms.*') ? 'active' : '' }}">
+                                <a href="{{ route('em_construcao') }}"
+                                    class="list-group-item list-group-item-action bg-transparent text-white sidebar-link">
                                     <i class="bi bi-diagram-3-fill"></i> OPMs
                                 </a>
 
@@ -146,13 +211,13 @@
                                     <i class="bi bi-search"></i> Consultas
                                 </a>
 
-                                <a href="{{ route('admin.relatorios.geral') }}"
-                                   class="list-group-item list-group-item-action bg-transparent text-white sidebar-link {{ request()->routeIs('admin.relatorios.*') ? 'active' : '' }}">
+                                <a href="{{ route('em_construcao') }}"
+                                    class="list-group-item list-group-item-action bg-transparent text-white sidebar-link">
                                     <i class="bi bi-clipboard-data-fill"></i> Relatórios (Admin)
                                 </a>
 
-                                <a href="{{ route('admin.manutencoes.index') }}"
-                                   class="list-group-item list-group-item-action bg-transparent text-white sidebar-link {{ request()->routeIs('admin.manutencoes.*') ? 'active' : '' }}">
+                                <a href="{{ route('em_construcao') }}"
+                                    class="list-group-item list-group-item-action bg-transparent text-white sidebar-link">
                                     <i class="bi bi-tools"></i> Manutenções (Admin)
                                 </a>
 

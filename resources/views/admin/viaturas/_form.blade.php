@@ -143,7 +143,7 @@
 </div>
 
 <div class="col-md-4">
-    <label class="form-label">Nº série do rádio</label>
+    <label class="form-label">ID Rádio</label>
     <input type="text" name="numero_serie_radio" id="numero_serie_radio"
            class="form-control @error('numero_serie_radio') is-invalid @enderror"
            value="{{ $val('numero_serie_radio') }}" maxlength="100">
@@ -208,9 +208,16 @@
 {{-- Município (FK) --}}
 <div class="col-md-4">
     <label class="form-label">Município <span class="text-danger">*</span></label>
-    <select name="municipio_id" id="municipio_id" data-selected="{{ $selectedMunicipioId }}"
+    <select name="municipio_id" id="municipio_id" data-selected="{{ $selectedMunicipioId ?? '' }}"
             class="form-select @error('municipio_id') is-invalid @enderror" required>
-        <option value="">Selecione...</option>
+        
+        @if(isset($veiculo) && $veiculo->municipio)
+            {{-- Mantém a cidade atual selecionada ao carregar a página de edição --}}
+            <option value="{{ $veiculo->municipio_id }}" selected>{{ $veiculo->municipio->nome }}</option>
+        @else
+            <option value="">Selecione a OPM primeiro...</option>
+        @endif
+
     </select>
     @error('municipio_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
     <div class="form-text">Municípios carregados conforme cobertura da OPM.</div>
@@ -568,7 +575,7 @@
     updateGarantia();
 
     // ================================
-    // CPR -> OPM -> Municípios (cobertura real)
+    // CPR -> OPM -> Municípios (cobertura real com herança ADM)
     // ================================
     (function () {
         const selCpr       = document.getElementById('area');
@@ -669,12 +676,28 @@
 
                 const municipios = await fetchJson(urlMunicipiosPorOpm + '?opm_id=' + encodeURIComponent(opmId));
 
-                municipios.forEach((m) => {
-                    const opt = document.createElement('option');
-                    opt.value = String(m.id);
-                    opt.textContent = m.label;
-                    selMunicipio.appendChild(opt);
-                });
+                if (municipios.length > 0) {
+                    // Tem municípios próprios
+                    municipios.forEach((m) => {
+                        const opt = document.createElement('option');
+                        opt.value = String(m.id);
+                        opt.textContent = m.label;
+                        selMunicipio.appendChild(opt);
+                    });
+                } else {
+                    // Fallback: Herança do Subcomando Geral (ID 1972)
+                    const subData = await fetchJson(urlMunicipiosPorOpm + '?opm_id=1972');
+                    if (subData.length > 0) {
+                        subData.forEach((m) => {
+                            const opt = document.createElement('option');
+                            opt.value = String(m.id);
+                            opt.textContent = m.label + ' (ADM - Subcomando)';
+                            selMunicipio.appendChild(opt);
+                        });
+                    } else {
+                        resetSelect(selMunicipio, 'Nenhuma cidade disponível');
+                    }
+                }
 
                 selMunicipio.disabled = false;
 

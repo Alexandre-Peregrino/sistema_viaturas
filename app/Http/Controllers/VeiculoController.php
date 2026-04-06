@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache; 
 
 class VeiculoController extends Controller
 {
@@ -59,19 +60,22 @@ class VeiculoController extends Controller
 
     public function porOpm(Request $request)
     {
-        // ✅ Lista de OPMs por ordem
-        $opms  = Opm::orderBy('sigla')->get(['id', 'sigla']);
+        // ✅ Lista de OPMs por ordem (com cache para performance)
+        $opms  = Cache::remember('opms_por_sigla', 3600, function () {
+            return Opm::orderBy('sigla')->get(['id', 'sigla']);
+        });
         $opmId = (int) $request->input('opm_id');
 
         $veiculos = collect();
 
         if ($opmId) {
-            // ✅ Regra nova: por OPM usando lotacaoAtual
+            // ✅ Regra oficial: por OPM usando lotacaoAtual (município lotado atual)
             $veiculos = Veiculo::whereHas('lotacaoAtual', fn($q) => $q->where('opm_id', $opmId))
-                ->with(['lotacaoAtual.opm', 'lotacaoAtual.municipio'])
+                ->with(['lotacaoAtual.opm', 'lotacaoAtual.municipio'])  // ✅ Carrega município lotado
                 ->withCount('manutencoes')
                 ->orderBy('prefixo')
                 ->paginate(50)
+                ->appends($request->query())  // ✅ Mantém filtros na paginação
                 ->withQueryString();
         }
 
@@ -254,6 +258,9 @@ class VeiculoController extends Controller
 
         $this->normalizeRequest($request);
 
+        // 1. Identifica o Subcomando Geral para a regra de herança
+        $subcomandoId = Opm::whereIn('sigla', ['SUBCOMANDO', 'CDO', 'SUBCMDGERAL'])->value('id');
+
         $currentYearPlusOne = now()->year + 1;
 
         $statusOptions = [
@@ -350,7 +357,17 @@ class VeiculoController extends Controller
 
             'situacao_carga'     => ['required', 'string', 'max:255'],
 
-            'municipio_id'       => ['nullable', 'integer', Rule::exists('municipios', 'id')],
+            // ✅ Validação Blindada: O município deve pertencer à OPM ou ao Subcomando
+            'municipio_id'       => [
+                'required',
+                'integer',
+                Rule::exists('opm_municipios', 'municipio_id')->where(function ($query) use ($request, $subcomandoId) {
+                    $query->where('opm_id', $request->input('opm_id'));
+                    if ($subcomandoId) {
+                        $query->orWhere('opm_id', $subcomandoId);
+                    }
+                }),
+            ],
             'observacao'         => ['nullable', 'string'],
         ], [
             'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
@@ -358,6 +375,8 @@ class VeiculoController extends Controller
             'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
             'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
             'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'municipio_id.required' => 'O município é obrigatório.',
+            'municipio_id.exists'   => 'O município selecionado não pertence à jurisdição desta OPM.',
         ]);
 
         if ($tipoSelecionado === 'Outros') {
@@ -469,6 +488,9 @@ class VeiculoController extends Controller
 
         $this->normalizeRequest($request);
 
+        // 1. Identifica o Subcomando Geral para a regra de herança
+        $subcomandoId = Opm::whereIn('sigla', ['SUBCOMANDO', 'CDO', 'SUBCMDGERAL'])->value('id');
+
         $currentYearPlusOne = now()->year + 1;
 
         $statusOptions = [
@@ -560,7 +582,17 @@ class VeiculoController extends Controller
 
             'situacao_carga'     => ['required', 'string', 'max:255'],
 
-            'municipio_id'       => ['nullable', 'integer', Rule::exists('municipios', 'id')],
+            // ✅ Validação Blindada: O município deve pertencer à OPM ou ao Subcomando
+            'municipio_id'       => [
+                'required',
+                'integer',
+                Rule::exists('opm_municipios', 'municipio_id')->where(function ($query) use ($request, $subcomandoId) {
+                    $query->where('opm_id', $request->input('opm_id'));
+                    if ($subcomandoId) {
+                        $query->orWhere('opm_id', $subcomandoId);
+                    }
+                }),
+            ],
             'observacao'         => ['nullable', 'string'],
         ], [
             'placa.unique'   => 'Esta placa já está cadastrada para outra viatura.',
@@ -568,6 +600,8 @@ class VeiculoController extends Controller
             'chassi.unique'  => 'Este chassi já está cadastrado para outra viatura.',
             'renavam.unique' => 'Este Renavam já está cadastrado para outra viatura.',
             'renavam.regex'  => 'RENAVAM deve conter entre 9 e 11 dígitos.',
+            'municipio_id.required' => 'O município é obrigatório.',
+            'municipio_id.exists'   => 'O município selecionado não pertence à jurisdição desta OPM.',
         ]);
 
         if ($tipoSelecionado === 'Outros') {

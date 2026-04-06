@@ -43,7 +43,7 @@ class VeiculoLotacao extends Model
 
     public function municipio(): BelongsTo
     {
-        return $this->belongsTo(Municipio::class);
+        return $this->belongsTo(Municipio::class,'municipio_id');
     }
 
     public function usuario(): BelongsTo

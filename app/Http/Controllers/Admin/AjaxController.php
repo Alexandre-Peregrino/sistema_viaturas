@@ -54,6 +54,7 @@ class AjaxController extends Controller
             return response()->json([]);
         }
 
+        // 1. Busca municípios vinculados diretamente à OPM selecionada
         $municipios = Municipio::query()
             ->join('opm_municipios', 'opm_municipios.municipio_id', '=', 'municipios.id')
             ->where('opm_municipios.opm_id', $opmId)
@@ -62,11 +63,29 @@ class AjaxController extends Controller
             ->orderBy('municipios.nome')
             ->get(['municipios.id', 'municipios.nome']);
 
-        $out = $municipios->map(fn($m) => ['id' => $m->id, 'label' => $m->nome]);
+        // 2. Se a lista estiver vazia (Unidade ADM), busca os municípios do Subcomando Geral
+        if ($municipios->isEmpty()) {
+            $subcomando = Opm::whereIn('sigla', ['SUBCOMANDO', 'CDO', 'SUBCMDGERAL'])->first();
+
+            if ($subcomando) {
+                $municipios = Municipio::query()
+                    ->join('opm_municipios', 'opm_municipios.municipio_id', '=', 'municipios.id')
+                    ->where('opm_municipios.opm_id', $subcomando->id)
+                    ->where('municipios.uf', 'RN')
+                    ->distinct()
+                    ->orderBy('municipios.nome')
+                    ->get(['municipios.id', 'municipios.nome']);
+            }
+        }
+
+        // Retorna o label formatado
+        $out = $municipios->map(fn($m) => [
+            'id' => $m->id,
+            'label' => $m->nome
+        ]);
 
         return response()->json($out);
     }
-
     /**
      * Lista CPRs existentes na tabela opms (distinct).
      */

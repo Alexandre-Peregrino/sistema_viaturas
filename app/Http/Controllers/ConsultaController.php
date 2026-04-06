@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\DB;
 
 class ConsultaController extends Controller
 {
@@ -145,15 +146,31 @@ class ConsultaController extends Controller
 
         $query = Veiculo::query()
             ->select([
-                'id', 'placa', 'prefixo',
-                'marca_modelo', 'marca', 'modelo',
-                'tipo_veiculo', 'combustivel', 'tracao',
-                'status', 'ativo',
-                'ano_fabricacao', 'ano_modelo',
-                'cidade', 'area',
+                'id',
+                'placa',
+                'prefixo',
+                'marca_modelo',
+                'marca',
+                'modelo',
+                'tipo_veiculo',
+                'combustivel',
+                'tracao',
+                'status',
+                'ativo',
+                'ano_fabricacao',
+                'ano_modelo',
+                'cidade',
+                'area',
+                'municipio_id',
                 'opm_id',
             ])
-            ->with(['opm:id,sigla,nome,cpr,cidade'])
+            ->with([
+                'opm:id,sigla,nome,cpr,cidade',
+                'lotacaoAtual.opm:id,sigla,nome',  // ✅ Lotação oficial (OPM)
+                'lotacaoAtual.municipio:id,nome',   // ✅ Município lotado oficial
+                'municipio:id,nome'                 // ✅ Município direto da viatura
+            ])
+
             ->when($q !== '', function ($qb) use ($q) {
                 $qb->where(function ($w) use ($q) {
                     $w->where('placa', 'ILIKE', "%{$q}%")
@@ -191,30 +208,22 @@ class ConsultaController extends Controller
     private function viaturasHtml(Request $request)
     {
         $filters = $this->readFilters($request);
-
-        // Permite "" (sem agrupamento) se você quiser
         $group = (string) $request->query('group', '');
-
         $groupAllowed = ['', 'opm', 'cpr', 'opm_cidade', 'viatura_cidade', 'area', 'ano_fab', 'ano_mod', 'marca', 'tracao'];
         if (!in_array($group, $groupAllowed, true)) $group = '';
 
         $perPage = (int) $request->query('per_page', 20);
         $perPage = ($perPage >= 10 && $perPage <= 200) ? $perPage : 20;
 
-        // ✅ total geral (para mostrar contador mesmo sem consulta)
-        // 🔒 aplica sigilo para não-admin, para não “vazar” contagem
         $totalGeralQuery = Veiculo::query();
         if (!$this->isAdmin()) {
             $totalGeralQuery->where(function ($q) {
-                $q->whereNull('nivel_sigilo')
-                    ->orWhere('nivel_sigilo', '<>', 'sigiloso');
+                $q->whereNull('nivel_sigilo')->orWhere('nivel_sigilo', '<>', 'sigiloso');
             });
         }
         $totalGeral = $totalGeralQuery->count();
 
-        // ✅ não lista tudo por padrão
         $executouConsulta = $this->hasAnyRealFilter($request, $filters);
-
         $options = $this->filterOptionsForViaturas();
         $activeChips = $this->makeActiveChips($filters);
 
@@ -226,48 +235,111 @@ class ConsultaController extends Controller
                 ->get(['id', 'sigla']);
         }
 
-        // Se não executou consulta: devolve paginator vazio + sem summary
-        if (!$executouConsulta) {
+        if (!$executouConsulta && $group === '') {
             $empty = new LengthAwarePaginator([], 0, $perPage, 1, [
-                'path'  => $request->url(),
+                'path' => $request->url(),
                 'query' => $request->query(),
             ]);
-
             return view('consultas.viaturas.index', [
-                'filters'      => $filters,
-                'group'        => $group,
-                'perPage'      => $perPage,
-                'viaturas'     => $empty,
-                'summary'      => null,
-                'options'      => $options,
-                'activeChips'  => $activeChips,
+                'filters' => $filters,
+                'group' => $group,
+                'perPage' => $perPage,
+                'viaturas' => $empty,
+                'summary' => null,
+                'options' => $options,
+                'activeChips' => $activeChips,
                 'selectedOpms' => $selectedOpms,
                 'executouConsulta' => false,
                 'totalGeral' => $totalGeral,
             ]);
         }
 
-        // ✅ Só aqui executa query/paginação
-        $base = $this->buildBaseQuery($filters);
+        $baseQuery = $this->buildBaseQuery($filters);
+        $q = $baseQuery->getQuery();
+        $q->orders = null;
 
-        $viaturas = (clone $base)
-            ->orderBy('prefixo')
-            ->paginate($perPage)
-            ->withQueryString();
+        $base = Veiculo::query()->fromSub($q, 'v')
+            ->leftJoin('veiculo_lotacoes as l', function ($join) {
+                $join->on('l.veiculo_id', 'v.id')->whereNull('l.data_saida');
+            })
+            ->leftJoin('opms as lot_o', 'lot_o.id', 'l.opm_id')
+            ->leftJoin('opms as o', 'o.id', 'v.opm_id');
+
+        $cprs = $filters['cprs'] ?? [];
+        if (!empty($cprs)) {
+            $cprFilter = "COALESCE(lot_o.cpr, o.cpr, '(sem CPR)') IN ('" . implode("','", array_map('addslashes', $cprs)) . "')";
+            $base->havingRaw($cprFilter);
+        }
+
+        // ✅ GROUP BY COM TODAS AS COLUNAS
+        $viaturas = $base
+        ->select([
+            'v.id',
+            'v.placa',
+            'v.prefixo',
+            'v.marca_modelo',
+            'v.marca',
+            'v.modelo',
+            'v.tipo_veiculo',
+            'v.combustivel',
+            'v.tracao',
+            'v.status',
+            'v.ativo',
+            'v.ano_fabricacao',
+            'v.ano_modelo',
+            'v.cidade',
+            'v.area',
+            'v.municipio_id',
+            'v.opm_id',
+            'v.chassi',
+            'v.renavam',
+            'v.numero_serie_radio',
+            DB::raw("COALESCE(lot_o.cpr, o.cpr, '(sem CPR)') as cpr"),
+            DB::raw("COALESCE(lot_o.sigla, o.sigla, '(sem OPM)') as opm_sigla"),
+        ])
+        ->groupBy([
+            'v.id',
+            'v.placa',
+            'v.prefixo',
+            'v.marca_modelo',
+            'v.marca',
+            'v.modelo',
+            'v.tipo_veiculo',
+            'v.combustivel',
+            'v.tracao',
+            'v.status',
+            'v.ativo',
+            'v.ano_fabricacao',
+            'v.ano_modelo',
+            'v.cidade',
+            'v.area',
+            'v.municipio_id',
+            'v.opm_id',
+            'v.chassi',
+            'v.renavam',
+            'v.numero_serie_radio',
+            'lot_o.cpr',
+            'o.cpr',
+            'lot_o.sigla',
+            'o.sigla',
+        ])
+        ->orderBy('v.prefixo')
+        ->simplePaginate($perPage)
+        ->withQueryString();
 
         $summary = null;
         if ($group !== '') {
-            $summary = $this->groupSummary(clone $base, $group);
+            $summary = $this->groupSummary(clone $base, $group, $filters);
         }
 
         return view('consultas.viaturas.index', [
-            'filters'      => $filters,
-            'group'        => $group,
-            'perPage'      => $perPage,
-            'viaturas'     => $viaturas,
-            'summary'      => $summary,
-            'options'      => $options,
-            'activeChips'  => $activeChips,
+            'filters' => $filters,
+            'group' => $group,
+            'perPage' => $perPage,
+            'viaturas' => $viaturas,
+            'summary' => $summary,
+            'options' => $options,
+            'activeChips' => $activeChips,
             'selectedOpms' => $selectedOpms,
             'executouConsulta' => true,
             'totalGeral' => $totalGeral,
@@ -298,12 +370,24 @@ class ConsultaController extends Controller
             fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
             fputcsv($out, [
-                'prefixo', 'placa', 'marca', 'modelo', 'marca_modelo',
-                'ano_fabricacao', 'ano_modelo',
-                'tracao', 'combustivel', 'tipo_veiculo',
-                'cidade_viatura', 'area',
-                'opm_sigla', 'opm_nome', 'opm_cpr', 'opm_cidade',
-                'ativo', 'status'
+                'prefixo',
+                'placa',
+                'marca',
+                'modelo',
+                'marca_modelo',
+                'ano_fabricacao',
+                'ano_modelo',
+                'tracao',
+                'combustivel',
+                'tipo_veiculo',
+                'cidade_viatura',
+                'area',
+                'opm_sigla',
+                'opm_nome',
+                'opm_cpr',
+                'opm_cidade',
+                'ativo',
+                'status'
             ], ';');
 
             $base->chunk(1000, function ($rows) use ($out) {
@@ -397,16 +481,32 @@ class ConsultaController extends Controller
     private function buildBaseQuery(array $filters)
     {
         $base = Veiculo::query()
-            ->with(['opm:id,sigla,nome,cpr,cidade'])
-            ->select([
-                'id', 'placa', 'prefixo',
-                'marca_modelo', 'marca', 'modelo',
-                'tipo_veiculo', 'combustivel', 'tracao',
-                'status', 'ativo',
-                'ano_fabricacao', 'ano_modelo',
-                'cidade', 'area',
-                'opm_id',
+            ->with([
+                'opm:id,sigla,nome,cpr,cidade',
+                'lotacaoAtual.opm:id,sigla,nome,cpr,cidade',  // ✅ Novo
             ]);
+        $base->select([
+            'id',
+            'placa',
+            'prefixo',
+            'marca_modelo',
+            'marca',
+            'modelo',
+            'tipo_veiculo',
+            'combustivel',
+            'tracao',
+            'status',
+            'ativo',
+            'ano_fabricacao',
+            'ano_modelo',
+            'cidade',
+            'area',
+            'municipio_id',
+            'opm_id',
+            'chassi',
+            'renavam',
+            'numero_serie_radio'
+        ]);
 
         // 🔒 Sigilo: veículos sigilosos só para admin
         if (!$this->isAdmin()) {
@@ -442,6 +542,20 @@ class ConsultaController extends Controller
                     ->orWhere('nome', 'ILIKE', "%{$q}%");
             });
         })
+
+            // CPR - baseado em campos da OPM
+            ->when(!empty($filters['cprs']), function ($qb) use ($filters) {
+                $qb->where(function ($q) use ($filters) {
+                    // Prioridade: lotacaoAtual.opm
+                    $q->whereHas('lotacaoAtual.opm', function ($opmQ) use ($filters) {
+                        $opmQ->whereIn('cpr', $filters['cprs']);
+                    })
+                    // Fallback: v.opm
+                    ->orWhereHas('opm', function ($opmQ) use ($filters) {
+                        $opmQ->whereIn('cpr', $filters['cprs']);
+                    });
+                });
+            })
 
             // OPM
             ->when(!empty($filters['opm_ids']), fn($qb) => $qb->whereIn('opm_id', array_map('intval', $filters['opm_ids'])))
@@ -482,8 +596,20 @@ class ConsultaController extends Controller
             ->when(!empty($filters['modelos']), fn($qb) => $qb->whereIn('modelo', $filters['modelos']))
 
             // Cidade/Área
-            ->when(!empty($filters['viatura_cidades']), fn($qb) => $qb->whereIn('cidade', $filters['viatura_cidades']))
-            ->when(!empty($filters['areas']), fn($qb) => $qb->whereIn('area', $filters['areas']))
+            ->when(!empty($filters['viatura_cidades']), function ($qb) use ($filters) {
+                // Busca os IDs dos municípios que correspondem aos nomes selecionados
+                $municipioIds = \App\Models\Municipio::query()
+                    ->whereIn('nome', $filters['viatura_cidades'])
+                    ->pluck('id')
+                    ->toArray();
+                
+                if (!empty($municipioIds)) {
+                    $qb->whereIn('municipio_id', $municipioIds);
+                }
+            })
+            ->when(!empty($filters['areas']), function ($qb) use ($filters) {
+                $qb->whereIn('area', $filters['areas']); // ✅ CORRETO
+            })
 
             // Ativo
             ->when(($filters['ativo'] ?? '') !== '', function ($qb) use ($filters) {
@@ -492,13 +618,25 @@ class ConsultaController extends Controller
 
         // filtros baseados em campos da OPM (CPR / cidade da unidade)
         if (!empty($filters['cprs']) || !empty($filters['opm_cidades'])) {
-            $base->whereHas('opm', function ($q) use ($filters) {
-                if (!empty($filters['cprs'])) {
-                    $q->whereIn('cpr', $filters['cprs']);
-                }
-                if (!empty($filters['opm_cidades'])) {
-                    $q->whereIn('cidade', $filters['opm_cidades']);
-                }
+            $base->where(function ($q) use ($filters) {
+                // Prioridade: lotacaoAtual.opm
+                $q->whereHas('lotacaoAtual.opm', function ($opmQ) use ($filters) {
+                    if (!empty($filters['cprs'])) {
+                        $opmQ->whereIn('cpr', $filters['cprs']);
+                    }
+                    if (!empty($filters['opm_cidades'])) {
+                        $opmQ->whereIn('cidade', $filters['opm_cidades']);
+                    }
+                })
+                    // Fallback: v.opm
+                    ->orWhereHas('opm', function ($opmQ) use ($filters) {
+                        if (!empty($filters['cprs'])) {
+                            $opmQ->whereIn('cpr', $filters['cprs']);
+                        }
+                        if (!empty($filters['opm_cidades'])) {
+                            $opmQ->whereIn('cidade', $filters['opm_cidades']);
+                        }
+                    });
             });
         }
 
@@ -516,12 +654,12 @@ class ConsultaController extends Controller
     /**
      * Resumo agrupado + links de drill-down (clicar aplica filtro)
      */
-    private function groupSummary($baseQuery, string $group): array
+    private function groupSummary($base, string $group, array $filters): array
     {
-        $q = $baseQuery->getQuery();
+        $q = $base->getQuery();
         $q->orders = null;
 
-        $total = (clone $baseQuery)->count();
+        $total = (clone $base)->count();
 
         $builder = Veiculo::query()->fromSub($q, 'v');
 
@@ -529,59 +667,72 @@ class ConsultaController extends Controller
         $label = 'Resumo';
 
         switch ($group) {
-            case 'opm':
-                $label = 'Por OPM';
-                $rows = $builder
-                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
-                    ->selectRaw("
-                        v.opm_id as key_id,
-                        COALESCE(o.sigla,'(sem OPM)') as label,
-                        COUNT(*) as total
-                    ")
-                    ->groupBy('v.opm_id', 'o.sigla')
-                    ->orderBy('label') // ✅ ordem alfabética
-                    ->limit(200)
-                    ->get();
-                break;
-
             case 'cpr':
                 $label = 'Por CPR';
-                $rows = $builder
-                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
-                    ->selectRaw("COALESCE(o.cpr,'(sem CPR)') as label, COUNT(*) as total")
-                    ->groupBy('o.cpr')
-                    ->orderByDesc('total')
+                
+                // Remove o filtro de CPR para o resumo mostrar TODAS as CPRs
+                $filtrosParaResumo = $filters;
+                unset($filtrosParaResumo['cprs']); // ← ESSENCIAL!
+                
+                $baseQueryParaResumo = $this->buildBaseQuery($filtrosParaResumo);
+                
+                $q = $baseQueryParaResumo->getQuery();
+                $q->orders = null;
+                
+                $rows = Veiculo::query()
+                    ->fromSub($q, 'v')
+                    ->leftJoin('veiculo_lotacoes as l', fn($join) => $join->on('l.veiculo_id', 'v.id')->whereNull('l.data_saida'))
+                    ->leftJoin('opms as lot_o', 'lot_o.id', 'l.opm_id')
+                    ->leftJoin('opms as o', 'o.id', 'v.opm_id')
+                    ->selectRaw("COALESCE(lot_o.cpr, o.cpr, '(sem CPR)') as label, COUNT(*) as total")
+                    ->groupBy('label')
+                    //->orderByDesc('total')      // Ordena pela quantidade
+                    ->orderBy('label')          // Depois, alfabeticamente
                     ->limit(200)
                     ->get();
                 break;
 
             case 'opm_cidade':
-                $label = 'Por Cidade (OPM)';
-                $rows = $builder
-                    ->leftJoin('opms as o', 'o.id', '=', 'v.opm_id')
-                    ->selectRaw("COALESCE(o.cidade,'(sem cidade)') as label, COUNT(*) as total")
-                    ->groupBy('o.cidade')
-                    ->orderByDesc('total')
-                    ->limit(200)
-                    ->get();
-                break;
-
-            case 'viatura_cidade':
                 $label = 'Por Cidade (Viatura)';
-                $rows = $builder
-                    ->selectRaw("COALESCE(v.cidade,'(sem cidade)') as label, COUNT(*) as total")
-                    ->groupBy('v.cidade')
-                    ->orderByDesc('total')
+                
+                // ADICIONE ESTAS LINHAS:
+                $filtrosParaResumo = $filters;
+                unset($filtrosParaResumo['viatura_cidades']); // ← ESTA LINHA É ESSENCIAL!
+                
+                // Depois use $filtrosParaResumo em vez de $filters:
+                $baseQueryParaResumo = $this->buildBaseQuery($filtrosParaResumo);
+                
+                $q = $baseQueryParaResumo->getQuery();
+                $q->orders = null;
+                
+                $rows = Veiculo::query()
+                    ->fromSub($q, 'v')
+                    ->join('municipios', 'municipios.id', '=', 'v.municipio_id')
+                    ->selectRaw("municipios.nome as key_id, municipios.nome as label, COUNT(*) as total")
+                    ->groupBy('municipios.nome')
+                   
+                    ->orderBy('municipios.nome')
                     ->limit(200)
                     ->get();
                 break;
 
             case 'area':
                 $label = 'Por Área';
-                $rows = $builder
-                    ->selectRaw("COALESCE(v.area,'(sem área)') as label, COUNT(*) as total")
-                    ->groupBy('v.area')
+                
+                $filtrosParaResumo = $filters;
+                unset($filtrosParaResumo['areas']); // ← ESSENCIAL!
+                
+                $baseQueryParaResumo = $this->buildBaseQuery($filtrosParaResumo);
+                
+                $q = $baseQueryParaResumo->getQuery();
+                $q->orders = null;
+                
+                $rows = Veiculo::query()
+                    ->fromSub($q, 'v')
+                    ->selectRaw("COALESCE(v.area, '(sem Área)') as label, COUNT(*) as total")
+                    ->groupBy('label')
                     ->orderByDesc('total')
+                    ->orderBy('label')
                     ->limit(200)
                     ->get();
                 break;
@@ -658,16 +809,13 @@ class ConsultaController extends Controller
                 if (!empty($row->key_id)) $addToArrayParam('opm_ids', $row->key_id);
                 break;
             case 'cpr':
-                $addToArrayParam('cprs', $row->label);
+                $params['cprs'] = [$row->label]; // ← Substitui em vez de adicionar
                 break;
             case 'opm_cidade':
-                $addToArrayParam('opm_cidades', $row->label);
-                break;
-            case 'viatura_cidade':
-                $addToArrayParam('viatura_cidades', $row->label);
+                $params['viatura_cidades'] = [$row->label];
                 break;
             case 'area':
-                $addToArrayParam('areas', $row->label);
+                $params['areas'] = [$row->label]; // ← Substitui em vez de adicionar
                 break;
             case 'ano_fab':
                 $addToArrayParam('anos_fab', $row->label);
