@@ -216,7 +216,7 @@
                                     <i class="bi bi-clipboard-data-fill"></i> Relatórios (Admin)
                                 </a>
 
-                                <a href="{{ route('em_construcao') }}"
+                                <a href="{{ route('admin.manutencoes.index') }}"
                                     class="list-group-item list-group-item-action bg-transparent text-white sidebar-link">
                                     <i class="bi bi-tools"></i> Manutenções (Admin)
                                 </a>

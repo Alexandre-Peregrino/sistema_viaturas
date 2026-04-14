@@ -70,19 +70,6 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="titulo" class="form-label">Título/Graduação:</label>
-                            <input
-                                type="text"
-                                class="form-control"
-                                id="titulo"
-                                name="titulo"
-                                value="{{ old('titulo', $usuario->titulo) }}"
-                                maxlength="80"
-                                placeholder="Ex.: SD / CB / SGT / TEN"
-                            >
-                        </div>
-
-                        <div class="mb-3">
                             <label for="posto_graduacao" class="form-label">Posto/Graduação (campo novo):</label>
                             <input
                                 type="text"
