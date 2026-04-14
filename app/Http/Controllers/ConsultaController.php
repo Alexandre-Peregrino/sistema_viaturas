@@ -967,4 +967,86 @@ class ConsultaController extends Controller
 
         return $chips;
     }
+        /**
+     * GET /consultas (com totalCount)
+     */
+    public function index(Request $request)
+    {
+        $filters = $request->only([
+            'q', 'opm_ids', 'cprs', 'opm_cidades', 'viatura_cidades', 'areas', 
+            'anos_fab', 'anos_mod', 'marcas', 'modelos', 'tracoes', 'combustiveis', 
+            'tipos', 'status', 'ativo', 'group' // Adicione group se usado
+        ]);
+
+        if (!$this->hasAnyRealFilter($request, $filters)) {
+            $totalCount = Veiculo::count(); // Total geral: 1454 (screenshot)
+            $results = Veiculo::paginate(20); // Sem filtro, lista geral
+            $chips = [];
+        } else {
+            $query = Veiculo::query();
+
+            // Filtro usuário (não admin/P4)
+            if (!$this->isAdmin() && !$this->isP4()) {
+                $userOpmId = $this->userOpmId();
+                if ($userOpmId) $query->where('opm_id', $userOpmId);
+            }
+
+            // Busca q
+            if (!empty($filters['q'])) {
+                $query->where(function ($w) use ($filters) {
+                    $w->where('placa', 'ILIKE', "%{$filters['q']}%")
+                    ->orWhere('prefixo', 'ILIKE', "%{$filters['q']}%")
+                    ->orWhere('chassi', 'ILIKE', "%{$filters['q']}%")
+                    ->orWhere('renavam', 'ILIKE', "%{$filters['q']}%");
+                });
+            }
+
+            // Mapeamento filtro → coluna BD (corrigido do project_context)
+            $columnMap = [
+                'anos_fab' => 'ano_fabricacao',
+                'anos_mod' => 'ano_modelo',
+                'marcas' => 'marca',
+                'modelos' => 'modelo',
+                'tracoes' => 'tracao',
+                'combustiveis' => 'combustivel',
+                'areas' => 'area',
+                'status' => 'status'
+            ];
+            foreach ($columnMap as $filterKey => $dbColumn) {
+                if (!empty($filters[$filterKey]) && is_array($filters[$filterKey])) {
+                    $values = array_filter(array_map('trim', $filters[$filterKey]));
+                    $values = array_filter($values, fn($v) => $v !== '_ALL_'); // Ignora _ALL_
+                    if (!empty($values)) {
+                        $query->whereIn($dbColumn, $values);
+                    }
+                }
+            }
+
+            // OPMs especiais (JOIN ou whereIn opm_id)
+            if (!empty($filters['opm_ids']) && is_array($filters['opm_ids'])) {
+                $opmIds = array_filter($filters['opm_ids'], fn($v) => $v !== '_ALL_' && is_numeric($v));
+                if (!empty($opmIds)) {
+                    $query->whereIn('opm_id', array_map('intval', $opmIds));
+                }
+            }
+
+            // Ativo
+            if (($filters['ativo'] ?? '') !== '') {
+                $query->where('ativo', $filters['ativo']);
+            }
+
+            // Outros (cpr, cidades): ajuste JOIN se preciso
+            if (!empty($filters['cprs'])) $query->where('cpr', $filters['cprs'][0] ?? '');
+            // viatura_cidades → cidade/municipio_id (exemplo)
+            if (!empty($filters['viatura_cidades'])) $query->whereIn('cidade', $filters['viatura_cidades']);
+
+            $results = $query->paginate(20); // Como screenshot (20 itens)
+            $totalCount = $query->count(); // Agora 21 para 2023
+            $chips = $this->makeActiveChips($filters);
+        }
+
+        $summary = ['total' => $totalCount];
+
+        return view('consultas.index', compact('results', 'summary', 'chips'));
+    }
 }

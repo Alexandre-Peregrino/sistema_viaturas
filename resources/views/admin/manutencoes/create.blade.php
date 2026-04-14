@@ -1,17 +1,23 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container">
-    <h2>Nova Manutenção</h2>
+<div class="bg-light bg-opacity-95 p-5 rounded shadow-lg mx-auto max-w-4xl min-vh-75">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10">
+            <h2 class="text-dark fw-bold mb-4 text-center">Nova Manutenção</h2>
 
-    <form id="form-manutencao" action="{{ route('admin.manutencoes.store') }}" method="POST">
-        @csrf
+            <form id="form-manutencao" action="{{ route('admin.manutencoes.store') }}" method="POST">
+                @csrf
 
-        @include('admin.manutencoes.partials.form', ['manutencao' => null])
+                @include('admin.manutencoes.partials.form', ['manutencao' => null])
 
-        <button type="submit" class="btn btn-success">Salvar</button>
-        <a href="{{ route('admin.manutencoes.index') }}" class="btn btn-secondary">Cancelar</a>
-    </form>
+                <div class="d-flex gap-3 justify-content-center mt-4">
+                    <button type="submit" class="btn btn-success btn-lg px-4">Salvar</button>
+                    <a href="{{ route('admin.manutencoes.index') }}" class="btn btn-secondary btn-lg px-4">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -46,6 +52,3 @@
     });
 </script>
 @endsection
-
-
-

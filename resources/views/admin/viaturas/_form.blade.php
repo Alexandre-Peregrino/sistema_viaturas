@@ -250,7 +250,7 @@
 </div>
 
 <div class="col-md-3">
-    <label class="form-label">Tipo veículo</label>
+    <label class="form-label">Categoria</label>
     <select name="tipo_veiculo" id="tipo_veiculo" class="form-select @error('tipo_veiculo') is-invalid @enderror">
         <option value="">Selecione...</option>
         @foreach($tiposVeiculo as $t)
@@ -311,13 +311,7 @@
     @error('combustivel_outro') <div class="invalid-feedback">{{ $message }}</div> @enderror
 </div>
 
-<div class="col-md-3">
-    <label class="form-label">Categoria</label>
-    <input type="text" name="categoria"
-           class="form-control @error('categoria') is-invalid @enderror"
-           value="{{ $val('categoria') }}" maxlength="255">
-    @error('categoria') <div class="invalid-feedback">{{ $message }}</div> @enderror
-</div>
+
 
 <div class="col-md-3">
     <label class="form-label">Emprego</label>
