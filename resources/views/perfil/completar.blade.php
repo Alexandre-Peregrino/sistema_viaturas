@@ -51,7 +51,7 @@
                             </div>
 
                             <div class="col-md-4">
-                                <label class="form-label">Número de Praça</label>
+                                <label class="form-label">Número Policial (NP)</label>
                                 <input type="text" name="numero_praca"
                                     class="form-control @error('numero_praca') is-invalid @enderror"
                                     value="{{ old('numero_praca', $user->numero_praca) }}"

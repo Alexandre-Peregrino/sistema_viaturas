@@ -83,7 +83,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="numero_praca" class="form-label">Número de Praça:</label>
+                            <label for="numero_praca" class="form-label">Número Policial (NP):</label>
                             <input
                                 type="text"
                                 class="form-control"
