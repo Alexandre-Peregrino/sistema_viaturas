@@ -6,23 +6,17 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up()
-{
-    Schema::create('radios', function (Blueprint $table) {
-        $table->id();
-        $table->string('numero_serie')->unique();
-        $table->string('modelo');
-        $table->timestamps();
-    });
-}
+    public function up(): void
+    {
+        Schema::create('radios', function (Blueprint $table) {
+            $table->id();
+            $table->string('numero_serie')->unique();
+            $table->string('modelo');
+            $table->string('status')->default('ativo');
+            $table->timestamps();
+        });
+    }
 
-
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('radios');

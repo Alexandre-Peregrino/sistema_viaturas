@@ -40,7 +40,7 @@ Este sistema tem como objetivo registrar, editar e consultar dados de viaturas p
 
 ### Pré-requisitos
 
-- PHP >= 8.1
+- PHP >= 8.3.11
 - Composer
 - PostgreSQL
 - Node.js e npm
@@ -60,7 +60,4 @@ php artisan migrate
 
 npm install && npm run dev
 
-php artisan serve
-```
-`
-```
+php artisan

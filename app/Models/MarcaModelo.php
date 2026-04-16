@@ -9,12 +9,26 @@ class MarcaModelo extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['marca', 'modelo'];
+    protected $fillable = [
+        'marca',
+        'modelo',
+        'categoria',
+        'combustivel',
+        'tracao',
+        'tipo_uso',
+        'consumo_medio',
+        'ativo',
+    ];
+    
 
-    // Se os veículos usam essa tabela
     public function veiculos()
     {
         return $this->hasMany(Veiculo::class);
     }
-}
 
+    // Acessor para exibir "marca - modelo"
+    public function getDescricaoAttribute()
+    {
+        return "{$this->marca} - {$this->modelo}";
+    }
+}

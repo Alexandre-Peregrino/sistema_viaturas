@@ -1,68 +1,55 @@
-<!-- resources/views/admin/viaturas/create.blade.php -->
-
 @extends('layouts.app')
 
 @section('content')
-<div class="container">
-    <h1 class="mb-4 text-primary">Cadastrar Nova Viatura</h1>
+<div class="container-fluid mt-4">
 
-    @if($errors->any())
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h3 class="mb-0 text-primary"><i class="bi bi-plus-circle"></i> Cadastrar Veículo</h3>
+            <div class="text-muted small">Preencha os dados conforme a estrutura do banco.</div>
+        </div>
+
+        <a href="{{ route('admin.viaturas.index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    @if ($errors->any())
         <div class="alert alert-danger">
-            <ul>
-                @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
+            <strong>Corrija os erros abaixo:</strong>
+            <ul class="mb-0">
+                @foreach ($errors->all() as $err)
+                    <li>{{ $err }}</li>
                 @endforeach
             </ul>
         </div>
     @endif
 
-    <form action="{{ route('admin.viaturas.store') }}" method="POST">
-        @csrf
-        <div class="row mb-3">
-            <div class="col">
-                <label for="marca_modelo" class="form-label">Marca/Modelo</label>
-                <input type="text" class="form-control" name="marca_modelo" id="marca_modelo" required>
-            </div>
-            <div class="col">
-                <label for="ano_fabricacao" class="form-label">Ano de Fabricação</label>
-                <input type="number" class="form-control" name="ano_fabricacao" id="ano_fabricacao" required>
-            </div>
+    <div class="card shadow-sm">
+        <div class="card-header bg-white fw-semibold">
+            Dados do veículo
         </div>
 
-        <div class="row mb-3">
-            <div class="col">
-                <label for="placa" class="form-label">Placa</label>
-                <input type="text" class="form-control" name="placa" id="placa" required>
-            </div>
-            <div class="col">
-                <label for="prefixo" class="form-label">Prefixo</label>
-                <input type="text" class="form-control" name="prefixo" id="prefixo">
-            </div>
-        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ route('admin.viaturas.store') }}" class="row g-3" id="formVeiculo">
+                @csrf
 
-        <div class="row mb-3">
-            <div class="col">
-                <label for="opm_id" class="form-label">OPM</label>
-                <select name="opm_id" id="opm_id" class="form-select" required>
-                    <option value="">Selecione</option>
-                    @foreach($opms as $opm)
-                        <option value="{{ $opm->id }}">{{ $opm->sigla }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col">
-                <label for="cidade_municipio" class="form-label">Cidade/Município</label>
-                <input type="text" class="form-control" name="cidade_municipio" id="cidade_municipio">
-            </div>
-        </div>
+                @include('admin.viaturas._form', [
+                    'veiculo' => $veiculo ?? null,
+                    // opcional: 'areas' => $areas ?? null,
+                ])
 
-        <div class="mb-3">
-            <label for="observacao" class="form-label">Observação</label>
-            <textarea class="form-control" name="observacao" id="observacao"></textarea>
+                <div class="col-12 d-flex gap-2 mt-2">
+                    <button class="btn btn-success">
+                        <i class="bi bi-check2-circle"></i> Salvar
+                    </button>
+                    <a href="{{ route('admin.viaturas.index') }}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
         </div>
+    </div>
 
-        <button type="submit" class="btn btn-success">Salvar</button>
-        <a href="{{ route('admin.viaturas.index') }}" class="btn btn-secondary">Cancelar</a>
-    </form>
 </div>
 @endsection

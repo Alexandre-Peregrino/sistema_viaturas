@@ -1,0 +1,517 @@
+1. Configuração Inicial
+Instalar dependências necessárias
+Certifique-se de que o PHP tenha o módulo LDAP instalado:
+sudo apt-get install php-ldap  # Para sistemas baseados em Debian
+sudo systemctl restart apache2 # Ou o servidor web que estiver usando
+
+2. Criar a estrutura de diretórios
+	2.1 Criar o diretório Ldap dentro do app
+	2.2 Criar, dentro do diretório Ldap, o arquivo Authldap.php
+<?php
+namespace App\Ldap;
+use iluminate\contracts\filesystem\ErrorException;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
+//use Illuminate\Support\Facades\Redirect;
+
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/**
+ * Description of Log
+ *
+ * @author Medeiros
+ *
+ */
+class Authldap {
+    protected $ldap_password;
+    protected $ldap_con;
+    protected $ldap_name;
+    protected $ldap_ip;
+    protected $ldap_dn;
+    protected $password_credencial_name = 'password';
+
+    public function __construct(){
+
+    }
+
+    /**
+     * Descrição:
+     * Revisão: 07/03/2025 10:30 @Márcio
+    */
+    public function autenticar($credenciais){
+        
+        // Verifica se o CPF contém apenas números, pontos e traços
+        if (preg_match('/^[0-9.-]+$/', $credenciais['cpf'])) {
+            $cpf = str_replace([".", "-"], "", $credenciais['cpf']);
+        } else {
+            $cpf = $credenciais['cpf'];
+        }
+
+        $user = User::where('cpf', $cpf)->first();
+        
+        if (!$user || $user->orgaos->isEmpty()){
+            return false;
+        }
+        
+        $senha = $credenciais['password'];
+        
+        foreach($user->orgaos as $orgao){
+            try {
+                $this->ldap_con = ldap_connect($orgao->ldap_ip);
+                
+                if(!$this->ldap_con){
+                    continue; // Tenta o próximo órgão se falhar na conexão
+                }
+                
+                $this->ldap_dn = $cpf . '@' . $orgao->ldap_name;
+                $this->ldap_password = $senha;
+                
+                if(ldap_bind($this->ldap_con, $this->ldap_dn, $this->ldap_password)){
+                    return true; // Autenticado com sucesso
+                }
+            }catch(\ErrorException $e){
+                continue; // Tenta o próximo órgão em caso de erro
+            }
+        }
+        
+        return false; // Nenhum órgão permitiu autenticação
+    }
+
+}
+
+2.3 Criar, dentro do diretório Ldap, o arquivo LdapProvider.php
+<?php
+
+namespace App\Ldap;
+
+use Illuminate\Auth\EloquentUserProvider;
+use Illuminate\Contracts\Auth\Authenticatable as UserContract;
+use App\Ldap\Authldap;
+
+class LdapProvider extends EloquentUserProvider
+{
+
+    public function validateCredentials(UserContract $user, array $credentials)
+    {
+       $authldap = new Authldap();
+
+       return $authldap->autenticar($credentials);
+    }
+
+}
+
+
+
+
+3. Configurar o Model User e Migration
+3.1 Atualizar a migration de users (se necessário)
+// database/migrations/xxxx_xx_xx_xxxxxx_create_users_table.php
+Schema::create('users', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('cpf')->unique();
+    $table->string('email')->unique();
+    $table->string('password');
+    // outros campos necessários
+    $table->timestamps();
+});
+3.2 Model User
+// app/Models/User.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable
+{
+    use HasFactory, Notifiable;
+
+    protected $fillable = [
+        'name', 'email', 'password', 'cpf'
+    ];
+
+    protected $hidden = [
+        'password', 'remember_token',
+    ];
+
+    public function orgaos()
+    {
+        return $this->belongsToMany(Orgao::class);
+    }
+}
+
+3.3 Model Orgao
+Crie um novo model para os órgãos:
+// app/Models/Orgao.php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Orgao extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'nome', 'ldap_ip', 'ldap_name'
+    ];
+
+    public function users()
+    {
+        return $this->belongsToMany(User::class);
+    }
+}
+
+3.4 Migration para orgaos
+// database/migrations/xxxx_xx_xx_xxxxxx_create_orgaos_table.php
+
+Schema::create('orgaos', function (Blueprint $table) {
+    $table->id();
+    $table->string('nome');
+    $table->string('ldap_ip');
+    $table->string('ldap_name');
+    $table->timestamps();
+});
+
+// Tabela pivot user_orgao
+Schema::create('user_orgao', function (Blueprint $table) {
+    $table->foreignId('user_id')->constrained();
+    $table->foreignId('orgao_id')->constrained();
+    $table->primary(['user_id', 'orgao_id']);
+});
+
+4. Atualize config/auth.php:
+
+
+    'defaults' => [
+        'guard' => 'web',
+        'passwords' => 'users',
+    ],
+
+    'guards' => [
+        'web' => [
+            'driver' => 'session',
+            'provider' => 'ldap',
+        ],
+    ],
+
+    'providers' => [
+        'ldap' => [
+            //'driver' => 'eloquent',
+            'driver' => 'ldap',
+            'model' => App\Models\User::class,
+            'sync_passwords' => false,
+        ],
+
+5. Atualize o AuthServiceProvider:
+php
+// app/Providers/AuthServiceProvider.php
+
+public function boot()
+{
+    $this->registerPolicies();
+
+    Auth::provider('ldap', function ($app, array $config) {
+        return new LdapUserProvider($app->make('ldap.auth'));
+    });
+}
+6. Criar o Controller de autenticação
+
+Dentro do App\Http\Controllers\Auth
+<?php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Providers\RouteServiceProvider;
+use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Session;
+//use Validator;
+
+class LoginController extends Controller
+{
+    /*
+    |--------------------------------------------------------------------------
+    | Login Controller
+    |--------------------------------------------------------------------------
+    |
+    | This controller handles authenticating users for the application and
+    | redirecting them to your home screen. The controller uses a trait
+    | to conveniently provide its functionality to your applications.
+    |
+    */
+
+    use AuthenticatesUsers;
+
+    /**
+     * Where to redirect users after login.
+     *
+     * @var string
+     */
+    protected $redirectTo = RouteServiceProvider::HOME;
+
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
+    public function __construct()
+    {
+        $this->middleware('guest')->except('logout');
+    }
+
+    /**
+     * Show the application's login form.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    /**
+     * Handle a login request to the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function login(Request $request)
+    {
+        //$this->validateLogin($request);
+
+        $validator = Validator::make($request->all(), [
+            $this->username() => 'required|string'
+        ]);
+
+        if ($validator->fails()) {
+            return redirect('login')->withErrors('O usuário é obrigatório');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string'
+        ]);
+
+        if ($validator->fails()) {
+            return redirect('login')->withErrors('Senha é obrigatória');
+        }
+
+//Com Recaptcha
+/*        $validator = Validator::make($request->all(), [
+            'g-recaptcha-response' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return redirect('login')->withErrors('O recaptcha é obrigatório');
+        }
+*/
+        // If the class is using the ThrottlesLogins trait, we can automatically throttle
+        // the login attempts for this application. We'll key this by the username and
+        // the IP address of the client making these requests into this application.
+        if (method_exists($this, 'hasTooManyLoginAttempts') &&
+            $this->hasTooManyLoginAttempts($request)) {
+            $this->fireLockoutEvent($request);
+
+            return $this->sendLockoutResponse($request);
+        }
+
+        if ($this->attemptLogin($request)) {
+            if ($request->hasSession()) {
+                $request->session()->put('auth.password_confirmed_at', time());
+            }
+
+            return $this->sendLoginResponse($request);
+        }
+
+        // If the login attempt was unsuccessful we will increment the number of attempts
+        // to login and redirect the user back to the login form. Of course, when this
+        // user surpasses their maximum number of attempts they will get locked out.
+        $this->incrementLoginAttempts($request);
+
+        return $this->sendFailedLoginResponse($request);
+    }
+
+    /**
+     * Validate the user login request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    protected function validateLogin(Request $request)
+    {
+        $request->validate([
+            $this->username() => 'required|string',
+            'password' => 'required|string',
+           // 'g-recaptcha-response' => 'required',
+        ]);
+    }
+
+    /**
+     * Attempt to log the user into the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return bool
+     */
+    protected function attemptLogin(Request $request)
+    {
+        
+        // Verifica se o CPF contém apenas números, pontos e traços
+        if (preg_match('/^[0-9.-]+$/', $request['cpf'])) {
+            $request['cpf'] = str_replace([".", "-"], "", $request['cpf']);
+        } else {
+            $request['cpf'] = $request['cpf'];
+        }
+
+        //$request['cpf'] = str_replace(".","",str_replace("-","",$request['cpf']));
+        return $this->guard('web')->attempt(
+           $this->credentials($request), $request->filled('remember')
+        );
+    }
+
+    /**
+     * Get the needed authorization credentials from the request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    protected function credentials(Request $request)
+    {
+        return $request->only($this->username(), 'password');
+    }
+
+    /**
+     * Send the response after the user was authenticated.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     */
+    protected function sendLoginResponse(Request $request)
+    {
+        $request->session()->regenerate();
+
+        $this->clearLoginAttempts($request);
+
+        if ($response = $this->authenticated($request, $this->guard()->user())) {
+            return $response;
+        }
+
+        return $request->wantsJson()
+                    ? new JsonResponse([], 204)
+                    : redirect()->intended($this->redirectPath());
+    }
+
+    /**
+     * The user has been authenticated.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  mixed  $user
+     * @return mixed
+     */
+    protected function authenticated(Request $request, $user)
+    {
+        //Auth::logoutOtherDevices($request['password']);
+
+        // Obtém a sessão ativa anterior
+        $previousSession = $user->password;
+
+        // Atualiza para a nova sessão
+        $user->password = session()->getId();
+        $user->save();
+
+        // Se houver uma sessão anterior, mata essa sessão
+        if ($previousSession) {
+            Session::getHandler()->destroy($previousSession);
+        }
+    }
+
+    /**
+     * Get the failed login response instance.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    protected function sendFailedLoginResponse(Request $request)
+    {
+        throw ValidationException::withMessages([
+            $this->username() => [trans('Usuário ou Senha inválido!!!')],
+        ]);
+    }
+
+    /**
+     * Get the login username to be used by the controller.
+     *
+     * @return string
+     */
+    public function username()
+    {
+        return 'cpf';
+    }
+
+    /**
+     * Log the user out of the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     */
+    public function logout(Request $request)
+    {
+        $this->guard()->logout();
+
+        $request->session()->invalidate();
+
+        $request->session()->regenerateToken();
+
+        if ($response = $this->loggedOut($request)) {
+            return $response;
+        }
+
+        return $request->wantsJson()
+            ? new JsonResponse([], 204)
+            : redirect('/');
+    }
+
+    /**
+     * The user has logged out of the application.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return mixed
+     */
+    protected function loggedOut(Request $request)
+    {
+        //
+    }
+
+    /**
+     * Get the guard to be used during authentication.
+     *
+     * @return \Illuminate\Contracts\Auth\StatefulGuard
+     */
+    protected function guard()
+    {
+        return Auth::guard();
+    }
+}
+
+
