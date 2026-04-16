@@ -1,8 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+
 <div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
-    <div class="container p-4 shadow" style="max-width: 420px; background-color: #ffffff; border-radius: 15px;">
+
+    <div class="container p-4 shadow" style="max-width: 420px; background-color: #ffffff; border-radius: 8px;">
 
         {{-- Logotipo centralizado --}}
         <div class="text-center mb-3">
@@ -11,11 +13,12 @@
 
         {{-- Título --}}
         <h2 class="mb-3 text-primary text-center">Acesso ao Sistema</h2>
+
         <p class="text-muted text-center mb-4" style="font-size: 0.95rem;">
             Use suas credenciais do <strong>AD (pm.govrn)</strong>.
         </p>
 
-        {{-- Mensagens de status (ex.: logout, bloqueio, etc.) --}}
+        {{-- Mensagens de status --}}
         @if (session('status'))
             <div class="alert alert-info">{{ session('status') }}</div>
         @endif
@@ -60,7 +63,7 @@
             <div class="mb-3">
                 <label for="password" class="form-label d-flex justify-content-between align-items-center">
                     <span>Senha</span>
-                    <button type="button" class="btn btn-sm btn-link p-0" id="togglePassword" aria-label="Mostrar/ocultar senha">
+                    <button type="button" class="btn btn-sm btn-link p-0" id="togglePassword" aria-label="Mostrar senha">
                         <i class="bi bi-eye" id="toggleIcon"></i>
                     </button>
                 </label>
@@ -79,7 +82,13 @@
             </div>
 
             <div class="mb-3 form-check">
-                <input class="form-check-input" type="checkbox" name="remember" id="remember" {{ old('remember') ? 'checked' : '' }}>
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    name="remember"
+                    id="remember"
+                    {{ old('remember') ? 'checked' : '' }}
+                >
                 <label class="form-check-label" for="remember">Lembrar-me</label>
             </div>
 
@@ -89,21 +98,20 @@
                 </button>
             </div>
 
-            {{-- Opcional: link de ajuda/suporte ou redefinição de senha do AD
-            <div class="mt-3 text-center">
-                <a href="#" class="small">Precisa de ajuda com sua senha?</a>
-            </div>
-            --}}
         </form>
+
     </div>
 </div>
+
 @endsection
 
 @section('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Força CPF com apenas dígitos e máximo de 11
+
+    // Força CPF com somente dígitos (11)
     const cpfInput = document.getElementById('cpf');
+
     cpfInput.addEventListener('input', function () {
         this.value = this.value.replace(/\D/g, '').slice(0, 11);
     });
@@ -119,6 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
         toggleIcon.classList.toggle('bi-eye');
         toggleIcon.classList.toggle('bi-eye-slash');
     });
+
 });
 </script>
 @endsection
